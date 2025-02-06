@@ -193,7 +193,10 @@ class DiscountCurve:
         if isinstance(dc_type, DayCountTypes) is False:
             raise FinError("Invalid Day Count type.")
 
-        dfs = self.df(dts)
+        if not self._from_ql:
+            dfs = self.df(dts, day_count=DayCountTypes.ZERO)
+        else:
+            dfs = self.df(dts, day_count=dc_type)
         zero_rates = self._df_to_zero(dfs, dts, freq_type, dc_type)
 
         if isinstance(dts, Date):

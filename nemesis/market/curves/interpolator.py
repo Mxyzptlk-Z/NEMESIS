@@ -63,8 +63,8 @@ def interpolate(t: Union[float, np.ndarray],  # time or array of times
 ###############################################################################
 
 
-@njit(float64(float64, float64[:], float64[:], int64),
-      fastmath=True, cache=True, nogil=True)
+# @njit(float64(float64, float64[:], float64[:], int64),
+#       fastmath=True, cache=True, nogil=True)
 def _uinterpolate(t, times, dfs, method):
     """ Return the interpolated value of y given x and a vector of x and y.
     The values of x must be monotonic and increasing. The different schemes for
@@ -171,8 +171,8 @@ def _uinterpolate(t, times, dfs, method):
 
 ###############################################################################
 
-@njit(float64[:](float64[:], float64[:], float64[:], int64),
-      fastmath=True, cache=True, nogil=True)
+# @njit(float64[:](float64[:], float64[:], float64[:], int64),
+#       fastmath=True, cache=True, nogil=True)
 def _vinterpolate(xValues,
                   xvector,
                   dfs,

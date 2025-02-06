@@ -129,6 +129,7 @@ class OISCurve(DiscountCurve):
         self._interp_type = interp_type
         self.check_refit = check_refit
         self._interpolator = None
+        self._from_ql = from_ql
 
         if not from_ql:
 
@@ -143,16 +144,28 @@ class OISCurve(DiscountCurve):
 
     ###############################################################################
 
-    def print_table(self, payment_dt):
+    def print_table(self, payment_dt: list):
         """Print a table of zero rate and discount factor on pivot dates."""
 
-        zr = self.zero_rate(
-            payment_dt, 
-            freq_type = FrequencyTypes.CONTINUOUS, 
-            dc_type = DayCountTypes.ACT_365L
-        )
+        if not self._from_ql:
+            
+            zr = self.zero_rate(
+                payment_dt, 
+                freq_type = FrequencyTypes.CONTINUOUS, 
+                dc_type = DayCountTypes.ACT_365L
+            )
+                
+            df = self.df(payment_dt, day_count = DayCountTypes.ZERO)
+        
+        else:
 
-        df = self.df(payment_dt, day_count = DayCountTypes.ZERO)
+            zr = self.zero_rate(
+                payment_dt, 
+                freq_type = FrequencyTypes.CONTINUOUS, 
+                dc_type = DayCountTypes.ACT_365L
+            )
+
+            df = self.df(payment_dt, day_count = DayCountTypes.ACT_365L)
 
         curve_result = pd.DataFrame({"Date": payment_dt, "ZR": (zr*100).round(5), "DF": df.round(6)})
 
@@ -197,7 +210,7 @@ class OISCurve(DiscountCurve):
     ###############################################################################
 
     @classmethod
-    def build_curve_from_ql(cls, value_dt, ql_curve, interp_type=InterpTypes.FLAT_FWD_RATES):
+    def build_curve_from_ql(cls, value_dt, ql_curve, interp_type=InterpTypes.LINEAR_ZERO_RATES):
         """Build OISCurve from a QuantLib curve."""
         times = []
         dfs = []
@@ -212,7 +225,7 @@ class OISCurve(DiscountCurve):
 
         # Create an instance of OISCurve
         instance = cls(value_dt, [], [], [], interp_type, from_ql=True)
-        instance._times = times
+        instance._times = np.array(times)
         instance._dfs = dfs
 
         # Fit the interpolator with the extracted times and discount factors
