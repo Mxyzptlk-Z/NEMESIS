@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Sep  5 09:17:42 2024
-
-@author: Guanzhifan
-"""
-
 import sys
 import os
 parant_folder_path = os.path.dirname(os.path.dirname(os.path.dirname(

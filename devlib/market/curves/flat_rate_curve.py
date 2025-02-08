@@ -1,13 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jan 30 11:33:35 2023
-
-@author: xieyushan
-"""
-
 import QuantLib as ql
-
-
 
 class FlatRateCurve:
     def __init__(self, discount_rate, ccy, calendar=ql.NullCalendar(), daycount=ql.Actual365Fixed()):

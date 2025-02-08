@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Aug 28 17:08:27 2023
-
-@author: xieyushan
-"""
-
 from abc import abstractmethod
 from typing import Union
 

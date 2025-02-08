@@ -152,7 +152,7 @@ class OISCurve(DiscountCurve):
             zr = self.zero_rate(
                 payment_dt, 
                 freq_type = FrequencyTypes.CONTINUOUS, 
-                dc_type = DayCountTypes.ACT_365L
+                dc_type = DayCountTypes.ACT_365F
             )
                 
             df = self.df(payment_dt, day_count = DayCountTypes.ZERO)
@@ -162,12 +162,14 @@ class OISCurve(DiscountCurve):
             zr = self.zero_rate(
                 payment_dt, 
                 freq_type = FrequencyTypes.CONTINUOUS, 
-                dc_type = DayCountTypes.ACT_365L
+                dc_type = DayCountTypes.ACT_365F
             )
 
-            df = self.df(payment_dt, day_count = DayCountTypes.ACT_365L)
+            df = self.df(payment_dt, day_count = DayCountTypes.ACT_365F)
+        
+        payment_dt_datetime = [dt.datetime() for dt in payment_dt]
 
-        curve_result = pd.DataFrame({"Date": payment_dt, "ZR": (zr*100).round(5), "DF": df.round(6)})
+        curve_result = pd.DataFrame({"Date": payment_dt_datetime, "ZR": (zr*100).round(5), "DF": df.round(6)})
 
         return curve_result
 

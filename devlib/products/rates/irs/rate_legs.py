@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Oct  8 16:11:51 2023
-
-@author: xieyushan
-"""
-
 import QuantLib as ql
 import numpy as np
 

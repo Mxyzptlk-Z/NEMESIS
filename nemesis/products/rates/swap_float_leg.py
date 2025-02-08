@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from typing import Union
 
 from ...utils.error import FinError
 from ...utils.date import Date
@@ -28,7 +29,7 @@ class SwapFloatLeg:
     def __init__(
         self,
         effective_dt: Date,  # Date interest starts to accrue
-        end_dt: (Date, str),  # Date contract ends
+        end_dt: Union[Date, str],  # Date contract ends
         leg_type: SwapTypes,
         spread: float,
         freq_type: FrequencyTypes,

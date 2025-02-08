@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Aug 12 17:00:20 2024
-
-@author: Guanzhifan
-"""
-
 from abc import abstractmethod
 from typing import Union
 import copy

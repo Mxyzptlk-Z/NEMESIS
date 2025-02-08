@@ -75,7 +75,7 @@ def pv01_times(t: float,
 ###############################################################################
 
 
-def times_from_dates(dt: (Date, list),
+def times_from_dates(dt: Union[Date, list],
                      value_dt: Date,
                      day_count_type: DayCountTypes = None):
     """ If a single date is passed in then return the year from valuation date
@@ -310,7 +310,7 @@ def normalise_weights(wt_vector: np.ndarray):
 
 
 def label_to_string(label: str,
-                    value: (float, str),
+                    value: Union[float, str],
                     separator: str = "\n",
                     list_format: bool = False):
     """ Format label/value pairs for a unified formatting. """
@@ -361,8 +361,8 @@ def table_to_string(header: str,
 ###############################################################################
 
 
-def format_table(header: (list, tuple),
-                 rows: (list, tuple)):
+def format_table(header: Union[list, tuple],
+                 rows: Union[list, tuple]):
     """ Format a 2D array into a table-like string.
     Similar to "table_to_string", but using a wrapper
     around PrettyTable to get a nice formatting. """
