@@ -69,12 +69,18 @@ class OIS:
         fixed_dc_type: DayCountTypes,
         notional: float = ONE_MILLION,
         payment_lag: int = 0,  # Number of days after period payment occurs
+        float_multiplier: float = 1.0,
         float_spread: float = 0.0,
+        float_compounding_type: str = 'ExcludeSprd',
         float_freq_type: FrequencyTypes = FrequencyTypes.ANNUAL,
         float_dc_type: DayCountTypes = DayCountTypes.THIRTY_E_360,
         cal_type: CalendarTypes = CalendarTypes.WEEKEND,
         bd_type: BusDayAdjustTypes = BusDayAdjustTypes.FOLLOWING,
         dg_type: DateGenRuleTypes = DateGenRuleTypes.BACKWARD,
+        reset_freq: str = 'None',
+        fixing_days: int = 0,
+        end_of_month: bool = False,
+        is_ois_leg: bool = False,
     ):
         """Create an overnight index swap contract giving the contract start
         date, its maturity, fixed cpn, fixed leg frequency, fixed leg day
@@ -90,7 +96,7 @@ class OIS:
         if isinstance(term_dt_or_tenor, Date):
             self.termination_dt = term_dt_or_tenor
         else:
-            self.termination_dt = effective_dt.add_business_tenor(term_dt_or_tenor, cal_type)
+            self.termination_dt = effective_dt.add_tenor(term_dt_or_tenor)
 
         calendar = Calendar(cal_type)
         self.maturity_dt = calendar.adjust(self.termination_dt, bd_type)
@@ -119,13 +125,16 @@ class OIS:
             cal_type,
             bd_type,
             dg_type,
+            end_of_month
         )
 
         self.float_leg = SwapFloatLeg(
             effective_dt,
             self.termination_dt,
             float_leg_type,
+            float_multiplier,
             float_spread,
+            float_compounding_type,
             float_freq_type,
             float_dc_type,
             notional,
@@ -134,12 +143,16 @@ class OIS:
             cal_type,
             bd_type,
             dg_type,
+            reset_freq,
+            fixing_days,
+            end_of_month,
+            is_ois_leg,
         )
 
     ###########################################################################
 
     def value(
-        self, value_dt: Date, ois_curve: DiscountCurve, first_fixing_rate=None
+        self, value_dt: Date, ois_curve: DiscountCurve
     ):
         """Value the interest rate swap on a value date given a single Ibor
         discount curve."""
@@ -147,7 +160,7 @@ class OIS:
         fixed_leg_value = self.fixed_leg.value(value_dt, ois_curve)
 
         float_leg_value = self.float_leg.value(
-            value_dt, ois_curve, ois_curve, first_fixing_rate
+            value_dt, ois_curve, ois_curve
         )
 
         value = fixed_leg_value + float_leg_value
@@ -167,7 +180,7 @@ class OIS:
 
     ###########################################################################
 
-    def swap_rate(self, value_dt, ois_curve, first_fixing_rate=None):
+    def swap_rate(self, value_dt, ois_curve):
         """Calculate the fixed leg cpn that makes the swap worth zero.
         If the valuation date is before the swap payments start then this
         is the forward swap rate as it starts in the future. The swap rate
@@ -178,7 +191,7 @@ class OIS:
         pv01 = self.pv01(value_dt, ois_curve)
 
         float_leg_value = self.float_leg.value(
-            value_dt, ois_curve, ois_curve, first_fixing_rate
+            value_dt, ois_curve, ois_curve
         )
 
         cpn = float_leg_value / pv01 / self.fixed_leg.notional

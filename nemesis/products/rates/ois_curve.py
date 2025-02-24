@@ -134,12 +134,8 @@ class OISCurve(DiscountCurve):
         if not from_ql:
 
             check_argument_types(getattr(self, _func_name(), None), locals())
-
-            # self.value_dt = value_dt
+            
             self._validate_inputs(ois_deposits, ois_fras, ois_swaps)
-            # self._interp_type = interp_type
-            # self.check_refit = check_refit
-            # self._interpolator = None
             self._build_curve()
 
     ###############################################################################
@@ -212,16 +208,18 @@ class OISCurve(DiscountCurve):
     ###############################################################################
 
     @classmethod
-    def build_curve_from_ql(cls, value_dt, ql_curve, interp_type=InterpTypes.LINEAR_ZERO_RATES):
+    def build_curve_from_ql(cls, value_dt, ql_curve, dc_type, interp_type=InterpTypes.LINEAR_ZERO_RATES):
         """Build OISCurve from a QuantLib curve."""
         times = []
         dfs = []
 
         # Extract dates and discount factors from the QuantLib curve
-        dates = list(ql_curve.dates())
+        curve = ql_curve.curve
+        index = ql_curve.index
+        dates = list(curve.dates())
         for date in dates:
             t = (ql_date_to_date(date) - value_dt) / g_days_in_year
-            df = ql_curve.discount(date)
+            df = curve.discount(date)
             times.append(t)
             dfs.append(df)
 
@@ -233,6 +231,12 @@ class OISCurve(DiscountCurve):
         # Fit the interpolator with the extracted times and discount factors
         instance._interpolator = Interpolator(interp_type)
         instance._interpolator.fit(instance._times, instance._dfs)
+
+        if not ql_curve.fixing_data.empty:
+            instance.fixing = ql_curve.fixing_data.set_index("Date")
+        instance.dc_type = dc_type
+        instance.spot_days = index.fixingDays()
+        instance.tenor = str(index.tenor())
 
         return instance
 

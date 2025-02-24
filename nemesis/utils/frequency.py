@@ -14,6 +14,7 @@ class FrequencyTypes(Enum):
     QUARTERLY = 4
     MONTHLY = 12
     WEEKLY = 48
+    DAILY = 365
     CONTINUOUS = 99
 
 ###############################################################################
@@ -43,5 +44,7 @@ def annual_frequency(freq_type: FrequencyTypes):
         return 12.0
     elif freq_type == FrequencyTypes.WEEKLY:
         return 48.0
+    elif freq_type == FrequencyTypes.DAILY:
+        return 365.0
 
 ###############################################################################

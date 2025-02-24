@@ -160,7 +160,7 @@ class SwapFixedLeg:
         self.cumulative_pvs = []
 
         notional = self.notional
-        df_value = discount_curve.df(value_dt)
+        df_value = discount_curve.df(value_dt, day_count=DayCountTypes.ACT_365F)
         leg_pv = 0.0
         num_payments = len(self.payment_dts)
 
@@ -173,7 +173,7 @@ class SwapFixedLeg:
 
             if payment_dt > value_dt:
 
-                df_payment = discount_curve.df(payment_dt) / df_value
+                df_payment = discount_curve.df(payment_dt, day_count=DayCountTypes.ACT_365F) / df_value
                 payment_pv = pmnt_amount * df_payment
                 leg_pv += payment_pv
 

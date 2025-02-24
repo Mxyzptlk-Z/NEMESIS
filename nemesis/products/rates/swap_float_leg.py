@@ -15,6 +15,7 @@ from ...utils.helpers import (
     label_to_string,
     check_argument_types,
 )
+from ...utils.rate_helper import get_ois_float_rate, get_comp_float_rate
 from ...utils.global_types import SwapTypes
 from ...market.curves.discount_curve import DiscountCurve
 
@@ -31,7 +32,9 @@ class SwapFloatLeg:
         effective_dt: Date,  # Date interest starts to accrue
         end_dt: Union[Date, str],  # Date contract ends
         leg_type: SwapTypes,
+        multiplier: float,
         spread: float,
+        compounding_type: str,
         freq_type: FrequencyTypes,
         dc_type: DayCountTypes,
         notional: float = ONE_MILLION,
@@ -40,7 +43,10 @@ class SwapFloatLeg:
         cal_type: CalendarTypes = CalendarTypes.WEEKEND,
         bd_type: BusDayAdjustTypes = BusDayAdjustTypes.FOLLOWING,
         dg_type: DateGenRuleTypes = DateGenRuleTypes.BACKWARD,
+        reset_freq: str = 'None',
+        fixing_days: int = 0,
         end_of_month: bool = False,
+        is_ois_leg: bool = False,
     ):
         """Create the fixed leg of a swap contract giving the contract start
         date, its maturity, fixed coupon, fixed leg frequency, fixed leg day
@@ -68,13 +74,18 @@ class SwapFloatLeg:
         self.principal = 0.0
         self.notional = notional
         self.notional_array = []
+        self.multiplier = multiplier
         self.spread = spread
+        self.compounding_type = compounding_type
+        self.reset_freq = reset_freq
+        self.fixing_days = fixing_days
 
         self.dc_type = dc_type
         self.cal_type = cal_type
         self.bd_type = bd_type
         self.dg_type = dg_type
         self.end_of_month = end_of_month
+        self.is_ois_leg = is_ois_leg
 
         self.start_accrued_dts = []
         self.end_accrued_dts = []
@@ -141,12 +152,63 @@ class SwapFloatLeg:
 
     ###########################################################################
 
+    def get_float_rates(self, value_dt, index_curve, only_future_float_rates=True):
+        if only_future_float_rates:
+            start_dates = np.array(self.start_accrued_dts)[np.array(self.payment_dts) > value_dt]
+            end_dates = np.array(self.end_accrued_dts)[np.array(self.payment_dts) > value_dt]
+        else:
+            start_dates = np.array(self.start_accrued_dts)
+            end_dates = np.array(self.end_accrued_dts)
+        
+        float_rates = []
+        if self.is_ois_leg:
+            for start_dt, end_dt in zip(start_dates, end_dates):
+                float_rate = get_ois_float_rate(index_curve, FrequencyTypes.DAILY, self.cal_type, self.dc_type, value_dt, start_dt, end_dt, self.spread)
+                float_rates.append(float_rate)
+        else:
+            reset_dates_array, fixing_dates_array = self.get_standard_float_schedule()
+            if only_future_float_rates:
+                fixing_dates_array = fixing_dates_array[np.array(self.payment_dts) > value_dt]
+                reset_dates_array = reset_dates_array[np.array(self.payment_dts) > value_dt]
+            for fixing_dates, reset_dates, end_date in zip(fixing_dates_array, reset_dates_array, end_dates):
+                float_rate = get_comp_float_rate(index_curve, value_dt, self.cal_type, fixing_dates, reset_dates, end_date, self.multiplier, self.spread, self.dc_type, self.compounding_type)
+                float_rates.append(float_rate)
+        
+        return np.array(float_rates)
+
+    ###########################################################################
+
+    def get_standard_float_schedule(self):
+        
+        reset_dates_list = []
+        fixing_dates_list = []
+
+        for start_dt, end_dt in zip(self.start_accrued_dts, self.end_accrued_dts):
+            if self.reset_freq == 'None':
+                reset_dates = np.array([start_dt])
+            else:
+                sch = Schedule(start_dt, end_dt, self.reset_freq, self.cal_type, bd_type=BusDayAdjustTypes.MODIFIED_FOLLOWING, dg_type=DateGenRuleTypes.FORWARD)
+                reset_dates = np.array(sch.adjusted_dts)
+            reset_dates_list.append(reset_dates)
+        
+        calendar = Calendar(self.cal_type)
+        for reset_dates in reset_dates_list:
+            fixing_dates = np.array([calendar.add_business_days(reset_dt, -self.fixing_days) for reset_dt in reset_dates])
+            fixing_dates_list.append(fixing_dates)
+        
+        reset_dates_array = np.array(reset_dates_list, dtype=object)
+        fixing_dates_array = np.array(fixing_dates_list, dtype=object)
+
+        return (reset_dates_array, fixing_dates_array)
+
+    ###########################################################################
+
     def value(
         self,
         value_dt: Date,  # This should be the settlement date
         discount_curve: DiscountCurve,
         index_curve: DiscountCurve,
-        first_fixing_rate: float = None,
+        # first_fixing_rate: float = None,
         pv_only=True,
     ):
         """Value the floating leg with payments from an index curve and
@@ -166,16 +228,18 @@ class SwapFloatLeg:
         self.payment_pvs = []
         self.cumulative_pvs = []
 
-        df_value = discount_curve.df(value_dt)
+        df_value = discount_curve.df(value_dt, day_count=DayCountTypes.ACT_365F)
         leg_pv = 0.0
         num_payments = len(self.payment_dts)
-        first_payment = False
+        # first_payment = False
 
         if not len(self.notional_array):
             self.notional_array = [self.notional] * num_payments
 
         index_basis = index_curve.dc_type
         index_day_counter = DayCount(index_basis)
+
+        float_rate = self.get_float_rates(value_dt, index_curve)
 
         for i_pmnt in range(0, num_payments):
 
@@ -191,16 +255,18 @@ class SwapFloatLeg:
                     start_accrued_dt, end_accrued_dt
                 )
 
-                if first_payment is False and first_fixing_rate is not None:
+                # if first_payment is False and first_fixing_rate is not None:
 
-                    fwd_rate = first_fixing_rate
-                    first_payment = True
+                #     fwd_rate = first_fixing_rate
+                #     first_payment = True
 
-                else:
+                # else:
 
-                    df_start = index_curve.df(start_accrued_dt)
-                    df_end = index_curve.df(end_accrued_dt)
-                    fwd_rate = (df_start / df_end - 1.0) / index_alpha
+                #     df_start = index_curve.df(start_accrued_dt, day_count=DayCountTypes.ACT_365F)
+                #     df_end = index_curve.df(end_accrued_dt, day_count=DayCountTypes.ACT_365F)
+                #     fwd_rate = (df_start / df_end - 1.0) / index_alpha
+                
+                fwd_rate = float_rate[i_pmnt]
 
                 payment_amount = (
                     (fwd_rate + self.spread)
@@ -208,7 +274,7 @@ class SwapFloatLeg:
                     * self.notional_array[i_pmnt]
                 )
 
-                df_payment = discount_curve.df(payment_dt) / df_value
+                df_payment = discount_curve.df(payment_dt, day_count=DayCountTypes.ACT_365F) / df_value
                 payment_pv = payment_amount * df_payment
                 leg_pv += payment_pv
 

@@ -440,8 +440,8 @@ class DiscountCurve:
                 dt2 = date_or_tenor[i]
 
             year_frac = day_count.year_frac(dt1, dt2)[0]
-            df1 = self.df(dt1)
-            df2 = self.df(dt2)
+            df1 = self.df(dt1, day_count=DayCountTypes.ACT_365F)
+            df2 = self.df(dt2, day_count=DayCountTypes.ACT_365F)
             fwd_rate = (df1 / df2 - 1.0) / year_frac
             fwd_rates.append(fwd_rate)
 
