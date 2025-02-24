@@ -232,7 +232,6 @@ def get_comp_float_rate(index_curve, today, fixing_dates, reset_dates, end_date,
     # get fixed rate and forward rate
     rate_array = get_fixing_rates(index_curve, today, fixing_dates, 
                                   use_last_fixing=use_last_fixing, product_type=product_type)
-    # print(rate_array)
     rate_array *= multiplier
     reset_dates = np.append(reset_dates, end_date)
     reset_period_dcf = np.array(

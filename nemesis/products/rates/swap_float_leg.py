@@ -206,9 +206,9 @@ class SwapFloatLeg:
     def value(
         self,
         value_dt: Date,  # This should be the settlement date
-        discount_curve: DiscountCurve,
         index_curve: DiscountCurve,
-        # first_fixing_rate: float = None,
+        discount_curve: DiscountCurve,
+        first_fixing_rate: float = None,
         pv_only=True,
     ):
         """Value the floating leg with payments from an index curve and
@@ -239,7 +239,8 @@ class SwapFloatLeg:
         index_basis = index_curve.dc_type
         index_day_counter = DayCount(index_basis)
 
-        float_rate = self.get_float_rates(value_dt, index_curve)
+        if index_curve._from_ql:
+            float_rate = self.get_float_rates(value_dt, index_curve)
 
         for i_pmnt in range(0, num_payments):
 
@@ -255,18 +256,22 @@ class SwapFloatLeg:
                     start_accrued_dt, end_accrued_dt
                 )
 
-                # if first_payment is False and first_fixing_rate is not None:
-
-                #     fwd_rate = first_fixing_rate
-                #     first_payment = True
-
-                # else:
-
-                #     df_start = index_curve.df(start_accrued_dt, day_count=DayCountTypes.ACT_365F)
-                #     df_end = index_curve.df(end_accrued_dt, day_count=DayCountTypes.ACT_365F)
-                #     fwd_rate = (df_start / df_end - 1.0) / index_alpha
+                if index_curve._from_ql:
                 
-                fwd_rate = float_rate[i_pmnt]
+                    fwd_rate = float_rate[i_pmnt]
+                
+                else:
+
+                    if first_payment is False and first_fixing_rate is not None:
+
+                        fwd_rate = first_fixing_rate
+                        first_payment = True
+
+                    else:
+
+                        df_start = index_curve.df(start_accrued_dt, day_count=DayCountTypes.ACT_365F)
+                        df_end = index_curve.df(end_accrued_dt, day_count=DayCountTypes.ACT_365F)
+                        fwd_rate = (df_start / df_end - 1.0) / index_alpha
 
                 payment_amount = (
                     (fwd_rate + self.spread)

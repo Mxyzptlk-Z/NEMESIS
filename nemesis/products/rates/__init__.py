@@ -6,3 +6,5 @@ from .ois_curve import *
 from .ois import *
 from .swap_fixed_leg import *
 from .swap_float_leg import *
+from .general_irs import *
+from .ql_curve import *

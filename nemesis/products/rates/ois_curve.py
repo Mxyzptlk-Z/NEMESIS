@@ -113,7 +113,6 @@ class OISCurve(DiscountCurve):
         ois_swaps: list,
         interp_type: InterpTypes = InterpTypes.FLAT_FWD_RATES,
         check_refit: bool = False,
-        from_ql: bool = False,
     ):  # Set to True to test it works
         """Create an instance of an overnight index rate swap curve given a
         valuation date and a set of OIS rates. Some of these may
@@ -129,42 +128,26 @@ class OISCurve(DiscountCurve):
         self._interp_type = interp_type
         self.check_refit = check_refit
         self._interpolator = None
-        self._from_ql = from_ql
 
-        if not from_ql:
-
-            check_argument_types(getattr(self, _func_name(), None), locals())
-            
-            self._validate_inputs(ois_deposits, ois_fras, ois_swaps)
-            self._build_curve()
+        check_argument_types(getattr(self, _func_name(), None), locals())
+        
+        self._validate_inputs(ois_deposits, ois_fras, ois_swaps)
+        self._build_curve()
 
     ###############################################################################
 
     def print_table(self, payment_dt: list):
         """Print a table of zero rate and discount factor on pivot dates."""
-
-        if not self._from_ql:
             
-            zr = self.zero_rate(
-                payment_dt, 
-                freq_type = FrequencyTypes.CONTINUOUS, 
-                dc_type = DayCountTypes.ACT_365F
-            )
-                
-            df = self.df(payment_dt, day_count = DayCountTypes.ZERO)
-        
-        else:
-
-            zr = self.zero_rate(
-                payment_dt, 
-                freq_type = FrequencyTypes.CONTINUOUS, 
-                dc_type = DayCountTypes.ACT_365F
-            )
-
-            df = self.df(payment_dt, day_count = DayCountTypes.ACT_365F)
+        zr = self.zero_rate(
+            payment_dt, 
+            freq_type = FrequencyTypes.CONTINUOUS, 
+            dc_type = DayCountTypes.ACT_365F
+        )
+            
+        df = self.df(payment_dt, day_count = DayCountTypes.ZERO)
         
         payment_dt_datetime = [dt.datetime() for dt in payment_dt]
-
         curve_result = pd.DataFrame({"Date": payment_dt_datetime, "ZR": (zr*100).round(5), "DF": df.round(6)})
 
         return curve_result
@@ -205,41 +188,6 @@ class OISCurve(DiscountCurve):
         self._build_curve_using_1d_solver()
         # self._build_curve_linear_swap_rate_interpolation()
     
-    ###############################################################################
-
-    @classmethod
-    def build_curve_from_ql(cls, value_dt, ql_curve, dc_type, interp_type=InterpTypes.LINEAR_ZERO_RATES):
-        """Build OISCurve from a QuantLib curve."""
-        times = []
-        dfs = []
-
-        # Extract dates and discount factors from the QuantLib curve
-        curve = ql_curve.curve
-        index = ql_curve.index
-        dates = list(curve.dates())
-        for date in dates:
-            t = (ql_date_to_date(date) - value_dt) / g_days_in_year
-            df = curve.discount(date)
-            times.append(t)
-            dfs.append(df)
-
-        # Create an instance of OISCurve
-        instance = cls(value_dt, [], [], [], interp_type, from_ql=True)
-        instance._times = np.array(times)
-        instance._dfs = dfs
-
-        # Fit the interpolator with the extracted times and discount factors
-        instance._interpolator = Interpolator(interp_type)
-        instance._interpolator.fit(instance._times, instance._dfs)
-
-        if not ql_curve.fixing_data.empty:
-            instance.fixing = ql_curve.fixing_data.set_index("Date")
-        instance.dc_type = dc_type
-        instance.spot_days = index.fixingDays()
-        instance.tenor = str(index.tenor())
-
-        return instance
-
     ###############################################################################
 
     def _validate_inputs(self, ois_deposits, ois_fras, ois_swaps):
