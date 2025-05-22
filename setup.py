@@ -37,6 +37,7 @@ setup(
         "prettytable",
         "openpyxl",
         "QuantLib",
+        "chinese-calendar",
     ],
     include_package_date=True,
     packages=find_packages(),
