@@ -52,7 +52,7 @@ class SwapFixedLeg:
             self.termination_dt = end_dt
         else:
             self.termination_dt = effective_dt.add_tenor(end_dt)
-
+        
         calendar = Calendar(cal_type)
 
         self.maturity_dt = calendar.adjust(self.termination_dt, bd_type)

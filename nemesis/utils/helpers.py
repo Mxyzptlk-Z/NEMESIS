@@ -9,6 +9,7 @@ from .date import Date
 from .global_vars import g_days_in_year, g_small
 from .error import FinError
 from .day_count import DayCountTypes, DayCount
+from .calendar import JointCalendar, CalendarTypes  # 导入需要的类型
 
 
 ###############################################################################
@@ -399,6 +400,9 @@ def to_usable_type(t):
         # t is a normal type
         if t is float:
             return (int, float, np.float64)
+        if t is CalendarTypes:
+            # 将 JointCalendar 也视为 CalendarTypes 的合法类型
+            return (CalendarTypes, JointCalendar)
         if isinstance(t, tuple):
             return tuple(to_usable_type(tp) for tp in t)
 
@@ -455,6 +459,11 @@ def check_argument_types(func, values):
 
         if value_name in values:
             value = values[value_name]
+            
+            # # 特殊处理 CalendarTypes 和 JointCalendar
+            # if annotation_type is CalendarTypes and isinstance(value, JointCalendar):
+            #     continue
+                
             usable_type = to_usable_type(annotation_type)
 
         if not isinstance(value, usable_type):

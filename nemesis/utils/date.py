@@ -896,6 +896,8 @@ class Date:
 
     ###########################################################################
     
+    # Only adjust to following, not recommended
+    # TODO: use calendar.adjust()
     def add_business_tenor(self, tenor: Union[str, Tenor], cal_type: "CalendarTypes"):
         """Return the date following the Date by a period given by the
         tenor which is a string consisting of a number and a letter, the

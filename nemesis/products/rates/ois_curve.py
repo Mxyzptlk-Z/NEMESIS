@@ -11,7 +11,6 @@ from ...utils.frequency import FrequencyTypes
 from ...utils.helpers import label_to_string
 from ...utils.helpers import check_argument_types, _func_name
 from ...utils.global_vars import g_days_in_year
-from ...utils.ql_helper import ql_date_to_date
 from ...market.curves.interpolator import InterpTypes, Interpolator
 from ...market.curves.discount_curve import DiscountCurve
 
@@ -132,6 +131,7 @@ class OISCurve(DiscountCurve):
         check_argument_types(getattr(self, _func_name(), None), locals())
         
         self._validate_inputs(ois_deposits, ois_fras, ois_swaps)
+        self._from_ql = False
         self._build_curve()
 
     ###############################################################################
@@ -145,7 +145,7 @@ class OISCurve(DiscountCurve):
             dc_type = DayCountTypes.ACT_365F
         )
             
-        df = self.df(payment_dt, day_count = DayCountTypes.ZERO)
+        df = self.df(payment_dt, day_count = DayCountTypes.ACT_365F)
         
         payment_dt_datetime = [dt.datetime() for dt in payment_dt]
         curve_result = pd.DataFrame({"Date": payment_dt_datetime, "ZR": (zr*100).round(5), "DF": df.round(6)})

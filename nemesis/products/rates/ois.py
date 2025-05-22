@@ -152,7 +152,7 @@ class OIS:
     ###########################################################################
 
     def value(
-        self, value_dt: Date, ois_curve: DiscountCurve
+        self, value_dt: Date, ois_curve: DiscountCurve, first_fixing_rate=None
     ):
         """Value the interest rate swap on a value date given a single Ibor
         discount curve."""
@@ -160,7 +160,7 @@ class OIS:
         fixed_leg_value = self.fixed_leg.value(value_dt, ois_curve)
 
         float_leg_value = self.float_leg.value(
-            value_dt, ois_curve, ois_curve
+            value_dt, ois_curve, ois_curve, first_fixing_rate
         )
 
         value = fixed_leg_value + float_leg_value

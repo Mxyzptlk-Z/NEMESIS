@@ -83,7 +83,7 @@ class Tona(cg.GeneralCurve):
 
 
 
-class TthoronOisRateHelperConfig(cg.OisRateHelperConfig):
+class ThoronOisRateHelperConfig(cg.OisRateHelperConfig):
     def __init__(
             self, 
             settlement_delay: int,
@@ -128,10 +128,10 @@ class TthoronOisRateHelperConfig(cg.OisRateHelperConfig):
 
 
 
-class Tthoron(cg.GeneralCurve):
+class ThorOnNd(cg.GeneralCurve):
     def curve_config_set(self):
         self.index_config = cg.GeneralOvernightIndexConfig(
-            curve_name='TTHORON', 
+            curve_name='THORONND', 
             settlement_delay=0, 
             currency=ql.THBCurrency(),
             calendar=ql.Thailand(), 
@@ -139,7 +139,7 @@ class Tthoron(cg.GeneralCurve):
         
         self.deposit_config = None
         
-        self.swap_config = TthoronOisRateHelperConfig(
+        self.swap_config = ThoronOisRateHelperConfig(
             settlement_delay=2,
             calendar=ql.Thailand(), 
             payment_lag=2, 
@@ -277,3 +277,101 @@ class Saron(cg.GeneralCurve):
         self.future_config = None
         
         self.curve_generator_config = GeneralCurveGenerator
+
+
+
+class Effr(cg.GeneralCurve):
+    def curve_config_set(self):
+        self.index_config = cg.OvernightIndexConfig(
+            curve_name = "EFFR",
+            ois_index_class=ql.FedFunds)
+        
+        self.deposit_config = None
+        
+        self.swap_config = cg.OisRateHelperConfig(
+            settlement_delay=2,
+            calendar=ql.UnitedStates(ql.UnitedStates.FederalReserve), 
+            payment_lag=2,
+            payment_freq=ql.Annual, 
+            payment_convention=ql.Following,
+            spread=0, 
+            forward_start=0)
+        
+        self.fra_config = None
+        
+        self.future_config = None
+        
+        self.curve_generator_config = GeneralCurveGenerator
+
+
+
+class InrOisRateHelperConfig(cg.OisRateHelperConfig):
+    def __init__(
+            self, 
+            settlement_delay: int,
+            calendar: ql.Calendar, 
+            payment_lag:int, 
+            payment_convention: int, 
+            spread: float, 
+            forward_start: int, 
+            ):
+        self.settlement_delay = settlement_delay
+        self.calendar = calendar
+        self.payment_lag = payment_lag
+        self.payment_convention = payment_convention
+        self.spread = spread
+        self.forward_start = forward_start
+
+        
+    def build_swap_helper(
+            self, 
+            tenor: str, 
+            rate: float, 
+            index: ql.Index, 
+            ):
+        if ql.Period(tenor) < ql.Period("2Y"):
+            payment_freq = ql.Annual
+        else:
+            payment_freq = ql.Semiannual
+            
+        if ql.Period(tenor) > ql.Period(payment_freq):
+            pillar_date_type = ql.Pillar.LastRelevantDate
+        else:
+            pillar_date_type = ql.Pillar.MaturityDate
+            
+        hp = ql.OISRateHelper(
+            self.settlement_delay, ql.Period(tenor), 
+            ql.QuoteHandle(ql.SimpleQuote(rate)), index,
+            ql.YieldTermStructureHandle(), True, self.payment_lag,
+            self.payment_convention, payment_freq, self.calendar,
+            ql.Period(str(self.forward_start) + 'D'),
+            self.spread, pillar_date_type, ql.Date())   
+        
+        return hp      
+    
+    
+    
+class MiborOnNd(cg.GeneralCurve):
+    def curve_config_set(self):
+        self.index_config = cg.GeneralOvernightIndexConfig(
+            curve_name='MIBORONND', 
+            settlement_delay=0, 
+            currency=ql.INRCurrency(),
+            calendar=ql.India(), 
+            daycount=ql.Actual365Fixed())
+        
+        self.deposit_config = None
+        
+        self.swap_config = InrOisRateHelperConfig(
+            settlement_delay=1,
+            calendar=ql.India(), 
+            payment_lag=0, 
+            payment_convention=ql.Following, 
+            spread=0, 
+            forward_start=0)
+        
+        self.fra_config = None
+        
+        self.future_config = None
+        
+        self.curve_generator_config = GeneralCurveGenerator  

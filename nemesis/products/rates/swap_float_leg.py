@@ -58,9 +58,9 @@ class SwapFloatLeg:
             self.termination_dt = end_dt
         else:
             self.termination_dt = effective_dt.add_tenor(end_dt)
-
+        
         calendar = Calendar(cal_type)
-
+        
         self.maturity_dt = calendar.adjust(self.termination_dt, bd_type)
 
         if effective_dt > self.maturity_dt:
@@ -231,7 +231,7 @@ class SwapFloatLeg:
         df_value = discount_curve.df(value_dt, day_count=DayCountTypes.ACT_365F)
         leg_pv = 0.0
         num_payments = len(self.payment_dts)
-        # first_payment = False
+        first_payment = False
 
         if not len(self.notional_array):
             self.notional_array = [self.notional] * num_payments
