@@ -44,6 +44,7 @@ class QLCurve(DiscountCurve):
         dc_type: DayCountTypes = DayCountTypes.ACT_360, 
         interp_type: InterpTypes = InterpTypes.LINEAR_ZERO_RATES,
         from_ql: bool = True,
+        is_index: bool = True,
     ):
         """Create an instance of an overnight index rate swap curve given a
         valuation date and a set of OIS rates. Some of these may
@@ -58,6 +59,7 @@ class QLCurve(DiscountCurve):
         self.value_dt = value_dt
         self._interp_type = interp_type
         self.ql_curve = ql_curve
+        self._is_index = is_index
         
         self._build_curve_from_ql(value_dt, ql_curve, dc_type, interp_type)
 
@@ -118,7 +120,6 @@ class QLCurve(DiscountCurve):
 
         # Extract dates and discount factors from the QuantLib curve
         curve = ql_curve.curve
-        index = ql_curve.index
         dates = list(curve.dates())
         for date in dates:
             t = (ql_date_to_date(date) - value_dt) / g_days_in_year
@@ -133,11 +134,14 @@ class QLCurve(DiscountCurve):
         self._interpolator = Interpolator(interp_type)
         self._interpolator.fit(self._times, self._dfs)
 
-        if not ql_curve.fixing_data.empty:
-            self.fixing = ql_curve.fixing_data.set_index("Date")
         self.dc_type = dc_type
-        self.spot_days = index.fixingDays()
-        self.tenor = str(index.tenor())
+
+        if self._is_index:
+            index = ql_curve.index
+            if not ql_curve.fixing_data.empty:
+                self.fixing = ql_curve.fixing_data.set_index("Date")
+            self.spot_days = index.fixingDays()
+            self.tenor = str(index.tenor())
 
     ###############################################################################
 
