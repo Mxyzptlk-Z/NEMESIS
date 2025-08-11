@@ -1,11 +1,8 @@
-##############################################################################
-# Copyright (C) 2018, 2019, 2020 Dominic O'Kane
-##############################################################################
-
 from copy import deepcopy
 from math import exp, log
 
 import numpy as np
+from typing import Union
 from numba import njit, float64, int64
 
 from ...utils.date import Date
@@ -33,21 +30,21 @@ GLOB_NUM_STEPS_PER_YEAR = 25
 ###############################################################################
 
 
-@njit(
-    float64[:](
-        float64,
-        float64,
-        float64[:],
-        float64[:],
-        float64[:],
-        float64[:],
-        float64[:],
-        float64[:],
-        int64,
-    ),
-    fastmath=True,
-    cache=True,
-)
+# @njit(
+#     float64[:](
+#         float64,
+#         float64,
+#         float64[:],
+#         float64[:],
+#         float64[:],
+#         float64[:],
+#         float64[:],
+#         float64[:],
+#         int64,
+#     ),
+#     fastmath=True,
+#     cache=True,
+# )
 def _risky_pv01_numba(
     teff,
     accrual_factor_pcd_to_now,
@@ -154,21 +151,21 @@ def _risky_pv01_numba(
 ###############################################################################
 
 
-@njit(
-    float64(
-        float64,
-        float64,
-        float64[:],
-        float64[:],
-        float64[:],
-        float64[:],
-        float64,
-        int64,
-        int64,
-    ),
-    fastmath=True,
-    cache=True,
-)
+# @njit(
+#     float64(
+#         float64,
+#         float64,
+#         float64[:],
+#         float64[:],
+#         float64[:],
+#         float64[:],
+#         float64,
+#         int64,
+#         int64,
+#     ),
+#     fastmath=True,
+#     cache=True,
+# )
 def _prot_leg_pv_numba(
     teff,
     t_mat,
@@ -240,7 +237,7 @@ class CDS:
     def __init__(
         self,
         step_in_dt: Date,  # Date protection starts
-        maturity_dt_or_tenor: (Date, str),  # Date or tenor
+        maturity_dt_or_tenor: Union[Date, str],  # Date or tenor
         running_cpn: float,  # Annualised cpn on premium fee leg
         notional: float = ONE_MILLION,
         long_protect: bool = True,
