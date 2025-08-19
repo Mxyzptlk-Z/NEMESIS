@@ -145,9 +145,28 @@ class QLCurve(DiscountCurve):
 
     ###############################################################################
 
+    def __repr__(self):
+        """Print out the details of the QuantLib curve."""
+
+        s = label_to_string("OBJECT TYPE", type(self).__name__)
+        s += label_to_string("VALUATION DATE", self.value_dt)
+
+        num_points = len(self._times)
+
+        s += label_to_string("INTERP TYPE", self._interp_type)
+
+        s += label_to_string("GRID TIMES", "GRID DFS")
+        for i in range(0, num_points):
+            s += label_to_string(
+                "% 10.6f" % self._times[i], "%12.10f" % self._dfs[i]
+            )
+
+        return s
+    
+    ###############################################################################
+
     def _print(self):
         """Simple print function for backward compatibility."""
         print(self)
-
 
     ###############################################################################
