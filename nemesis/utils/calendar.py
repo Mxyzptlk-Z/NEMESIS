@@ -64,6 +64,7 @@ class CalendarTypes(Enum):
     UNITED_KINGDOM = 15
     CHINA = 16
     JOINT = 17
+    CDS = 18
 
 
 class DateGenRuleTypes(Enum):
@@ -289,6 +290,8 @@ class Calendar:
             # 对于联合日历类型，使用 JointCalendar 的逻辑
             # 但这里不会被调用，因为 JointCalendar 重写了 is_holiday 方法
             return False
+        elif self.cal_type == CalendarTypes.CDS:
+            return self.holiday_5u(dt)
         else:
             print(self.cal_type)
             raise FinError("Unknown calendar")
@@ -299,6 +302,17 @@ class Calendar:
         """ Weekends by themselves are a holiday. """
 
         if dt.is_weekend():
+            return True
+        else:
+            return False
+
+###############################################################################
+
+    def holiday_5u(self, dt: Date):
+
+        holiday_list = [Date(20,6,2022), Date(20,6,2033), Date(20,6,2039), Date(20,6,2044), Date(20,6,2050)]
+        
+        if dt.is_weekend() or dt in holiday_list:
             return True
         else:
             return False

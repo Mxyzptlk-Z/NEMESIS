@@ -23,6 +23,7 @@ class InterpTypes(Enum):
     PCHIP_LOG_DISCOUNT = 11
     LINEAR_ONFWD_RATES = 21
     TENSION_ZERO_RATES = 22
+    BACKWARD_FLAT_HAZARD_RATES = 23
 
 
 # LINEAR_SWAP_RATES = 3
@@ -140,6 +141,12 @@ def _uinterpolate(t, times, dfs, method):
             rtvalue = ((times[i - 1] - t) * rt1 +
                        (t - times[i - 2]) * rt2) / dt
             yvalue = np.exp(-rtvalue)
+
+        return yvalue
+    
+    elif method == InterpTypes.BACKWARD_FLAT_HAZARD_RATES.value:
+
+        yvalue = dfs[i]
 
         return yvalue
 
@@ -401,6 +408,7 @@ class Interpolator():
 
         is_suitable = {
             InterpTypes.FLAT_FWD_RATES: True,
+            InterpTypes.BACKWARD_FLAT_HAZARD_RATES: True,
             InterpTypes.LINEAR_FWD_RATES: True,
             InterpTypes.LINEAR_ZERO_RATES: True,
             InterpTypes.FINCUBIC_ZERO_RATES: False,
