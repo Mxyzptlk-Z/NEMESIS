@@ -12,7 +12,7 @@ from ...utils.calendar import BusDayAdjustTypes, DateGenRuleTypes
 from ...utils.day_count import DayCount, DayCountTypes
 from ...utils.frequency import annual_frequency, FrequencyTypes
 from ...utils.global_vars import g_days_in_year
-from ...utils.math import ONE_MILLION
+from ...utils.math import ONE_MILLION, ZERO
 from ...utils.helpers import label_to_string, table_to_string
 from ...market.curves.interpolator import InterpTypes, _uinterpolate
 
@@ -32,6 +32,8 @@ class GeneralCDS:
         step_in_dt: Date,  # Date protection starts
         maturity_dt_or_tenor: Union[Date, str],  # Date or tenor
         running_cpn: float,  # Annualised cpn on premium fee leg
+        upfront_payment_dt: Date,
+        upfront_amount: float = ZERO,
         notional: float = ONE_MILLION,
         long_protect: bool = True,
         freq_type: FrequencyTypes = FrequencyTypes.QUARTERLY,
@@ -61,12 +63,15 @@ class GeneralCDS:
         self.running_cpn = running_cpn
         self.notional = notional
         self.long_protect = long_protect
+        self.upfront_payment_dt = upfront_payment_dt
+        self.upfront_amount = upfront_amount
         self.dc_type = dc_type
         self.dg_type = dg_type
         self.cal_type = cal_type
         self.freq_type = freq_type
         self.bd_type = bd_type
 
+        self.upfront_payment_flag = upfront_amount != ZERO
         self._generate_adjusted_cds_payment_dts()
         self._calc_flows()
 
@@ -190,9 +195,6 @@ class GeneralCDS:
 
         rpv01 = self.risky_pv01(value_dt, issuer_curve)
 
-        dirty_rpv01 = rpv01["dirty_rpv01"]
-        clean_rpv01 = rpv01["clean_rpv01"]
-
         prot_pv = self.prot_leg_pv(
             value_dt,
             issuer_curve,
@@ -205,6 +207,12 @@ class GeneralCDS:
             long_prot = +1
         else:
             long_prot = -1
+
+        if self.upfront_payment_flag:
+            return fwd_df * long_prot * (prot_pv - rpv01)
+
+        dirty_rpv01 = rpv01["dirty_rpv01"]
+        clean_rpv01 = rpv01["clean_rpv01"]
 
         dirty_pv = (
             fwd_df
@@ -264,7 +272,11 @@ class GeneralCDS:
         npv_up = self.value(value_dt, credit_curve_up)
         npv_down = self.value(value_dt, credit_curve_down)
 
-        credit_dv01 = (npv_up["dirty_pv"] - npv_down["dirty_pv"]) / (2 * bump)
+        if not self.upfront_payment_flag:
+            npv_up = npv_up["dirty_pv"]
+            npv_down = npv_down["dirty_pv"]
+
+        credit_dv01 = (npv_up - npv_down) / (2 * bump)
 
         return credit_dv01
 
@@ -340,7 +352,11 @@ class GeneralCDS:
         npv_up = self.value(value_dt, credit_curve_up)
         npv_down = self.value(value_dt, credit_curve_down)
 
-        interest_dv01 = (npv_up["dirty_pv"] - npv_down["dirty_pv"]) / (2 * bump) * 1e-4
+        if not self.upfront_payment_flag:
+            npv_up = npv_up["dirty_pv"]
+            npv_down = npv_down["dirty_pv"]
+
+        interest_dv01 = (npv_up - npv_down) / (2 * bump) * 1e-4
 
         return interest_dv01
 
@@ -479,6 +495,9 @@ class GeneralCDS:
         the premium leg of a CDS contract."""
 
         libor_curve = issuer_curve.libor_curve
+
+        if self.upfront_payment_flag:
+            return self.upfront_amount * libor_curve.df(self.upfront_payment_dt, day_count=DayCountTypes.ACT_365F)
 
         # this is the part of the cpn accrued from the previous cpn date
         # to now
