@@ -2,6 +2,7 @@ from copy import deepcopy
 from math import exp, log
 
 import numpy as np
+from enum import Enum
 from typing import Union
 from numba import njit, float64, int64
 
@@ -22,6 +23,15 @@ from .ql_cds_curve import QLCreditCurve
 
 STANDARD_RECOVERY_RATE = 0.40
 
+class AccCouponTypes(Enum):
+    ZERO = 0
+    TO_DEFAULT = 1
+    TO_PERIOD_END = 2
+
+class AccCouponPayTypes(Enum):
+    DEFAULT = 0
+    PERIOD_END = 1
+
 
 class GeneralCDS:
     """A class which manages a Credit Default Swap. It performs schedule
@@ -32,19 +42,22 @@ class GeneralCDS:
         step_in_dt: Date,  # Date protection starts
         maturity_dt_or_tenor: Union[Date, str],  # Date or tenor
         running_cpn: float,  # Annualised cpn on premium fee leg
-        upfront_payment_dt: Date,
+        upfront_payment_dt: Date = None,
         upfront_amount: float = ZERO,
         notional: float = ONE_MILLION,
+        coupon_pay_front: bool = False,
         long_protect: bool = True,
         freq_type: FrequencyTypes = FrequencyTypes.QUARTERLY,
         dc_type: DayCountTypes = DayCountTypes.ACT_360,
         cal_type: CalendarTypes = CalendarTypes.WEEKEND,
         bd_type: BusDayAdjustTypes = BusDayAdjustTypes.FOLLOWING,
         dg_type: DateGenRuleTypes = DateGenRuleTypes.BACKWARD,
+        ac_type: AccCouponTypes = AccCouponTypes.TO_DEFAULT,
+        acp_type: AccCouponPayTypes = AccCouponPayTypes.DEFAULT
     ):
         """Create a CDS from the step-in date, maturity date and cpn"""
 
-        check_argument_types(self.__init__, locals())
+        # check_argument_types(self.__init__, locals())
 
         if isinstance(maturity_dt_or_tenor, Date):
             maturity_dt = maturity_dt_or_tenor
@@ -62,6 +75,7 @@ class GeneralCDS:
         self.maturity_dt = maturity_dt
         self.running_cpn = running_cpn
         self.notional = notional
+        self.coupon_pay_front = coupon_pay_front
         self.long_protect = long_protect
         self.upfront_payment_dt = upfront_payment_dt
         self.upfront_amount = upfront_amount
@@ -70,6 +84,8 @@ class GeneralCDS:
         self.cal_type = cal_type
         self.freq_type = freq_type
         self.bd_type = bd_type
+        self.ac_type = ac_type
+        self.acp_type = acp_type
 
         self.upfront_payment_flag = upfront_amount != ZERO
         self._generate_adjusted_cds_payment_dts()
@@ -149,7 +165,10 @@ class GeneralCDS:
             raise FinError("Unknown DateGenRuleType:" + str(self.dg_type))
 
         # We only include dates which fall after the CDS start date
-        self.payment_dts = adjusted_dts[1:]
+        if not self.coupon_pay_front:
+            self.payment_dts = adjusted_dts[1:]
+        else:
+            self.payment_dts = adjusted_dts[1:-1]
 
         # Accrual start dates run from previous cpn date to penultimate
         # cpn date
@@ -430,6 +449,9 @@ class GeneralCDS:
         """Calculate the amount of accrued interest that has accrued from the
         previous cpn date (PCD) to the step_in_dt of the CDS contract."""
 
+        if self.coupon_pay_front:
+            return 0.0
+
         day_count = DayCount(self.dc_type)
         pcd = self.accrual_start_dts[0]
         accrual_factor = day_count.year_frac(pcd, self.step_in_dt.add_days(1))[0]
@@ -494,86 +516,48 @@ class GeneralCDS:
         """The risky_pv01 is the present value of a risky one dollar paid on
         the premium leg of a CDS contract."""
 
+        day_count = DayCount(self.dc_type)
         libor_curve = issuer_curve.libor_curve
+        year_fracs = self.accrual_factors
 
         if self.upfront_payment_flag:
             return self.upfront_amount * libor_curve.df(self.upfront_payment_dt, day_count=DayCountTypes.ACT_365F)
 
-        # this is the part of the cpn accrued from the previous cpn date
-        # to now
-        pcd = self.accrual_start_dts[0]
-        ncd = self.accrual_end_dts[0]
-        eff = self.step_in_dt
-        cpd = self.payment_dts[0]
+        if not self.coupon_pay_front:
+            pcd = self.accrual_start_dts[0]
+            ncd = self.accrual_end_dts[0]
+            eff = self.step_in_dt
+            cpd = self.payment_dts[0]
+            accrual_factor_pcd_to_now = day_count.year_frac(pcd, eff.add_days(1))[0]
 
-        day_count = DayCount(self.dc_type)
+            q1 = issuer_curve.survival_prob(ncd)
+            z1 = libor_curve.df(cpd, day_count=DayCountTypes.ACT_365F)
 
-        accrual_factor_pcd_to_now = day_count.year_frac(pcd, eff.add_days(1))[0]
+            full_rpv01 = q1 * z1 * year_fracs[0]
+        else:
+            pcd = self.accrual_start_dts[1]
+            ncd = self.accrual_end_dts[0]
+            accrual_factor_pcd_to_now = 0.0
 
-        year_fracs = self.accrual_factors
+            q1 = issuer_curve.survival_prob(pcd)
+            z1 = libor_curve.df(pcd, day_count=DayCountTypes.ACT_365F)
 
-        # The first cpn is a special case which needs to be handled carefully
-        # taking into account what cpn has already accrued and what has not
-        q1 = issuer_curve.survival_prob(ncd)
-        z1 = libor_curve.df(cpd, day_count=DayCountTypes.ACT_365F)
+            full_rpv01 = q1 * z1 * year_fracs[1]
 
-        # reference credit survives to the premium payment date
-        full_rpv01 = q1 * z1 * year_fracs[0]
+        if coupon_accrued:
+            if self.coupon_pay_front and (self.ac_type == AccCouponTypes.TO_PERIOD_END):
+                full_rpv01 += 0.0
+            elif (not self.coupon_pay_front) and (self.ac_type == AccCouponTypes.ZERO):
+                full_rpv01 += 0.0
+            else:
+                first_period_accrual_pv = 0.0
+                step_in_days = int(self.step_in_dt - value_dt)
+                first_period_end_days = int(ncd - value_dt)
 
-        first_period_accrual_pv = 0.0
-        step_in_days = int(self.step_in_dt - value_dt)
-        first_period_end_days = int(ncd - value_dt)
+                for day in range(step_in_days, first_period_end_days):
 
-        for day in range(step_in_days, first_period_end_days):
-
-            date_start = value_dt.add_days(day)
-            date_end = value_dt.add_days(day + 1)
-            
-            # Ensure we don't exceed maturity
-            if date_end > self.maturity_dt:
-                date_end = self.maturity_dt
-            
-            # Get survival probabilities at day boundaries
-            s_start = issuer_curve.survival_prob(date_start)
-            s_end = issuer_curve.survival_prob(date_end)
-            
-            # Get discount factor for payment at day end
-            libor_curve = issuer_curve.libor_curve
-            df_end = libor_curve.df(date_end, day_count=DayCountTypes.ACT_365F)
-            
-            # Calculate daily default probability
-            default_prob = s_start - s_end
-            daily_contribution = default_prob * df_end * day_count.year_frac(pcd, date_end)[0]
-            first_period_accrual_pv += daily_contribution
-        
-        full_rpv01 += first_period_accrual_pv
-
-        for it in range(1, len(self.payment_dts)):
-
-            pcd = self.accrual_start_dts[it]
-            ncd = self.accrual_end_dts[it]
-            cpd = self.payment_dts[it]
-
-            q2 = issuer_curve.survival_prob(ncd)
-            z2 = libor_curve.df(cpd, day_count=DayCountTypes.ACT_365F)
-
-            accrual_factor = year_fracs[it]
-
-            # full cpn is paid at the end of the current period if survives to
-            # payment date
-            full_rpv01 += q2 * z2 * accrual_factor
-
-            #######################################################################
-
-            if coupon_accrued:
-
-                period_accrual_pv = 0.0
-                period_end_days = int(ncd - pcd)
-                
-                for day in range(0, period_end_days):
-                    # Convert day to Date objects for curve lookups
-                    date_start = pcd.add_days(day)
-                    date_end = pcd.add_days(day + 1)
+                    date_start = value_dt.add_days(day)
+                    date_end = value_dt.add_days(day + 1)
                     
                     # Ensure we don't exceed maturity
                     if date_end > self.maturity_dt:
@@ -589,13 +573,125 @@ class GeneralCDS:
                     
                     # Calculate daily default probability
                     default_prob = s_start - s_end
-                    daily_contribution = default_prob * df_end * day_count.year_frac(pcd, date_end)[0]
-                    period_accrual_pv += daily_contribution
+
+                    if not self.coupon_pay_front:
+                        daily_contribution = default_prob * df_end * day_count.year_frac(pcd, date_end)[0]
+                    else:
+                        daily_contribution = default_prob * df_end * day_count.year_frac(date_end, ncd.add_days(1))[0]
+
+                    first_period_accrual_pv += daily_contribution
+
+                if not self.coupon_pay_front:
+                    full_rpv01 += first_period_accrual_pv
+                else:
+                    full_rpv01 -= first_period_accrual_pv
+
+        # For the rest of the periods
+        for it in range(1, len(self.payment_dts)):
+
+            if not self.coupon_pay_front:
+                pcd = self.accrual_start_dts[it]
+                ncd = self.accrual_end_dts[it]
+                cpd = self.payment_dts[it]
+
+                q2 = issuer_curve.survival_prob(ncd)
+                z2 = libor_curve.df(cpd, day_count=DayCountTypes.ACT_365F)
+
+                accrual_factor = year_fracs[it]
+            else:
+                pcd = self.accrual_start_dts[it+1]
+                ncd = self.accrual_end_dts[it]
+                ppcd = self.accrual_end_dts[it-1]
+
+                q2 = issuer_curve.survival_prob(pcd)
+                z2 = libor_curve.df(pcd, day_count=DayCountTypes.ACT_365F)
+
+                accrual_factor = year_fracs[it+1]
+
+            # full cpn is paid at the end of the current period if survives to
+            # payment date
+            full_rpv01 += q2 * z2 * accrual_factor
+
+            #######################################################################
+
+            if coupon_accrued:
+
+                if self.coupon_pay_front and (self.ac_type == AccCouponTypes.TO_PERIOD_END):
+                    full_rpv01 += 0.0
+                elif (not self.coupon_pay_front) and (self.ac_type == AccCouponTypes.ZERO):
+                    full_rpv01 += 0.0
+                else:
+                    period_accrual_pv = 0.0
+                    if not self.coupon_pay_front:
+                        period_end_days = int(ncd - pcd)
+                    else:
+                        period_end_days = int(ncd - ppcd)
                     
-                    d_full_rpv01 = period_accrual_pv
-            
-            full_rpv01 = full_rpv01 + d_full_rpv01
+                    for day in range(0, period_end_days):
+                        # Convert day to Date objects for curve lookups
+                        if not self.coupon_pay_front:
+                            date_start = pcd.add_days(day)
+                            date_end = pcd.add_days(day + 1)
+                        else:
+                            date_start = ppcd.add_days(day)
+                            date_end = ppcd.add_days(day + 1)
+                        
+                        # Ensure we don't exceed maturity
+                        if date_end > self.maturity_dt:
+                            date_end = self.maturity_dt
+                        
+                        # Get survival probabilities at day boundaries
+                        s_start = issuer_curve.survival_prob(date_start)
+                        s_end = issuer_curve.survival_prob(date_end)
+                        
+                        # Get discount factor for payment at day end
+                        libor_curve = issuer_curve.libor_curve
+                        df_end = libor_curve.df(date_end, day_count=DayCountTypes.ACT_365F)
+                        
+                        # Calculate daily default probability
+                        default_prob = s_start - s_end
+
+                        if not self.coupon_pay_front:
+                            daily_contribution = default_prob * df_end * day_count.year_frac(pcd, date_end)[0]
+                        else:
+                            daily_contribution = default_prob * df_end * day_count.year_frac(date_end, ncd.add_days(1))[0]
+
+                        period_accrual_pv += daily_contribution
+
+                    if not self.coupon_pay_front:
+                        full_rpv01 += period_accrual_pv
+                    else:
+                        full_rpv01 -= period_accrual_pv
+
             q1 = q2
+        
+        # For the last period
+        if coupon_accrued and self.coupon_pay_front and (self.ac_type == AccCouponTypes.TO_DEFAULT):
+            pcd = self.accrual_end_dts[-2]
+            ncd = self.accrual_end_dts[-1]
+            period_end_days = int(ncd - pcd)
+            period_accrual_pv = 0.0
+
+            for day in range(0, period_end_days):
+                # Convert day to Date objects for curve lookups
+                date_start = pcd.add_days(day)
+                date_end = pcd.add_days(day + 1)
+                
+                # Get survival probabilities at day boundaries
+                s_start = issuer_curve.survival_prob(date_start)
+                s_end = issuer_curve.survival_prob(date_end)
+                
+                # Get discount factor for payment at day end
+                libor_curve = issuer_curve.libor_curve
+                df_end = libor_curve.df(date_end, day_count=DayCountTypes.ACT_365F)
+                
+                # Calculate daily default probability
+                default_prob = s_start - s_end
+
+                daily_contribution = default_prob * df_end * day_count.year_frac(date_end, ncd.add_days(1))[0]
+                period_accrual_pv += daily_contribution
+            
+            full_rpv01 -= period_accrual_pv
 
         clean_rpv01 = full_rpv01 - accrual_factor_pcd_to_now
 
@@ -679,13 +775,22 @@ class GeneralCDS:
         s += label_to_string("ACCRUED DAYS", self.accrued_days())
 
         header = "PAYMENT_dt, YEAR_FRAC, ACCRUAL_START, ACCRUAL_END, FLOW"
-        value_table = [
-            self.payment_dts,
-            self.accrual_factors,
-            self.accrual_start_dts,
-            self.accrual_end_dts,
-            self.flows,
-        ]
+        if not self.coupon_pay_front:
+            value_table = [
+                self.payment_dts,
+                self.accrual_factors,
+                self.accrual_start_dts,
+                self.accrual_end_dts,
+                self.flows,
+            ]
+        else:
+            value_table = [
+                self.payment_dts,
+                self.accrual_factors[1:],
+                self.accrual_start_dts[1:],
+                self.accrual_end_dts[1:],
+                self.flows[1:],
+            ]
         precision = "12.6f"
 
         s += table_to_string(header, value_table, precision)
