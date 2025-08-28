@@ -528,10 +528,11 @@ class GeneralCDS:
             ncd = self.accrual_end_dts[0]
             eff = self.step_in_dt
             cpd = self.payment_dts[0]
-            accrual_factor_pcd_to_now = day_count.year_frac(pcd, eff.add_days(1))[0]
 
             q1 = issuer_curve.survival_prob(ncd)
             z1 = libor_curve.df(cpd, day_count=DayCountTypes.ACT_365F)
+
+            accrual_factor_pcd_to_now = day_count.year_frac(pcd, eff.add_days(1))[0] * z1
 
             full_rpv01 = q1 * z1 * year_fracs[0]
         else:
