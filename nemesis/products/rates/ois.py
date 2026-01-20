@@ -99,10 +99,11 @@ class OIS:
             self.termination_dt = effective_dt.add_tenor(term_dt_or_tenor)
 
         calendar = Calendar(cal_type)
+
         self.maturity_dt = calendar.adjust(self.termination_dt, bd_type)
 
         if effective_dt > self.maturity_dt:
-            raise FinError("Start date after maturity date")
+            raise FinError("Effective date after maturity date")
 
         self.effective_dt = effective_dt
 

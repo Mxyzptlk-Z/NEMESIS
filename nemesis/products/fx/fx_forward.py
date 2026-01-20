@@ -1,9 +1,4 @@
-##############################################################################
-# Copyright (C) 2018, 2019, 2020 Dominic O'Kane
-##############################################################################
-
 import numpy as np
-
 
 from ...utils.date import Date
 from ...utils.global_vars import g_days_in_year
@@ -23,6 +18,7 @@ class FXForward:
     def __init__(
         self,
         expiry_dt: Date,
+        spot_fx_rate: float,  # 1 unit of foreign in domestic
         strike_fx_rate: float,  # PRICE OF 1 UNIT OF FOR IN DOM CCY
         currency_pair: str,  # FOR DOM
         notional: float,
@@ -33,7 +29,7 @@ class FXForward:
         against the DOM currency at the strike_fx_rate and to pay it in the
         notional currency."""
 
-        check_argument_types(self.__init__, locals())
+        # check_argument_types(self.__init__, locals())
 
         delivery_dt = expiry_dt.add_weekdays(spot_days)
 
@@ -49,6 +45,7 @@ class FXForward:
 
         self.expiry_dt = expiry_dt
         self.delivery_dt = delivery_dt
+        self.spot_fx_rate = spot_fx_rate
         self.strike_fx_rate = strike_fx_rate
 
         self.currency_pair = currency_pair
@@ -74,7 +71,6 @@ class FXForward:
     def value(
         self,
         value_dt,
-        spot_fx_rate,  # 1 unit of foreign in domestic
         domestic_curve,
         foreign_curve,
     ):
@@ -102,7 +98,7 @@ class FXForward:
         else:
             t = value_dt
 
-        if np.any(spot_fx_rate <= 0.0):
+        if np.any(self.spot_fx_rate <= 0.0):
             raise FinError("spot_fx_rate must be greater than zero.")
 
         if np.any(t < 0.0):
@@ -111,7 +107,7 @@ class FXForward:
         t = np.maximum(t, 1e-10)
 
         newfwd_fx_rate = self.forward(
-            value_dt, spot_fx_rate, domestic_curve, foreign_curve
+            value_dt, domestic_curve, foreign_curve
         )
 
         dom_df = domestic_curve.df_t(t)
@@ -133,7 +129,7 @@ class FXForward:
             v = v * self.notional * dom_df * newfwd_fx_rate
 
         self.cash_dom = v * self.notional_dom / self.strike_fx_rate
-        self.cash_for = v * self.notional_for / spot_fx_rate
+        self.cash_for = v * self.notional_for / self.spot_fx_rate
 
         return {
             "value": v,
@@ -150,7 +146,6 @@ class FXForward:
     def forward(
         self,
         value_dt,
-        spot_fx_rate,  # 1 unit of foreign in domestic
         domestic_curve,
         foreign_curve,
     ):
@@ -162,7 +157,7 @@ class FXForward:
         else:
             t = value_dt
 
-        if np.any(spot_fx_rate <= 0.0):
+        if np.any(self.spot_fx_rate <= 0.0):
             raise FinError("spot_fx_rate must be greater than zero.")
 
         if np.any(t < 0.0):
@@ -173,7 +168,15 @@ class FXForward:
         for_df = foreign_curve.df_t(t)
         dom_df = domestic_curve.df_t(t)
 
-        fwd_fx_rate = spot_fx_rate * for_df / dom_df
+        self.settle_dt = value_dt.add_weekdays(self.spot_days)
+        t_settle = (self.settle_dt - value_dt) / g_days_in_year
+
+        for_df_settle = foreign_curve.df_t(t_settle)
+        dom_df_settle = domestic_curve.df_t(t_settle)
+
+        self.value_fx_rate = self.spot_fx_rate * dom_df_settle / for_df_settle
+
+        fwd_fx_rate = self.value_fx_rate * for_df / dom_df
         return fwd_fx_rate
 
     ###########################################################################
