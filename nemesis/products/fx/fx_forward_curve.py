@@ -6,6 +6,7 @@ from ...utils.calendar import CalendarTypes
 from ...utils.day_count import DayCountTypes
 from ...utils.fx_helper import get_fx_pair_base_size
 from ...utils.global_vars import g_days_in_year
+from ...market.curves.discount_curve import DiscountCurve
 from ...market.curves.interpolator import InterpTypes, Interpolator
 
 T1_SETTLE_FX_PAIRS = ["USDCAD", "CADUSD", "USDPHP", "PHPUSD", "USDMNT", "MNTUSD", "USDRUB", "RUBUSD"]
@@ -13,7 +14,7 @@ T1_SETTLE_FX_PAIRS = ["USDCAD", "CADUSD", "USDPHP", "PHPUSD", "USDMNT", "MNTUSD"
 ###############################################################################
 
 
-class FxForwardCurve:
+class FxForwardCurve(DiscountCurve):
     """
     """
     
@@ -107,14 +108,14 @@ class FxForwardCurve:
     ###############################################################################
 
     def get_forward(self, dt: Date):
-        t = (dt - self.value_dt) / g_days_in_year
-        return self.spot_today / self._interpolator.interpolate(t)
-    
-    # def get_forward_spot(self, date):
-    #     # 按spot date获取fx forward
-    #     real_date = date #当前默认T+0
-    #     return self.get_forward(real_date)
-    
+        return self.spot_today / self.df(dt, day_count=DayCountTypes.ACT_365F)
+
+    ###############################################################################
+
+    def get_forward_spot(self, dt):
+        return self.get_forward(dt)
+
+    ###############################################################################
 
     # def tweak_spot(self, tweak):
     #     tweaked_curve = copy.copy(self)
@@ -122,7 +123,7 @@ class FxForwardCurve:
     #     tweaked_curve.spot = self.spot + tweak
 
     #     return tweaked_curve
-    
+
 
     # # rd up or rf down
     # def tweak_parallel(self, tweak):
@@ -134,14 +135,14 @@ class FxForwardCurve:
     #     daycount = self.daycount
     #     for i in range(len(tweaked_curve.fx_fwd_dfs)):
     #         tweaked_curve.fx_fwd_dfs[i] *= np.exp(-tweak * daycount.yearFraction(today, fx_fwd_dates[i]))
-        
+
     #     curve = ql.DiscountCurve(fx_fwd_dates, tweaked_curve.fx_fwd_dfs, daycount, calendar)
     #     curve.enableExtrapolation()
     #     tweaked_curve.curve = curve
     #     tweaked_curve.spot = tweaked_curve.get_forward(self.spot_date)
 
     #     return tweaked_curve
-    
+
 
     # # forward curve after dccy curve tweak
     # def tweak_dccy_curve(self, dccy_curve_orig, dccy_curve_tweaked):
