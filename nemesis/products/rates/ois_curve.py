@@ -111,8 +111,10 @@ class OISCurve(DiscountCurve):
         ois_fras: list,
         ois_swaps: list,
         interp_type: InterpTypes = InterpTypes.FLAT_FWD_RATES,
-        check_refit: bool = False,
-    ):  # Set to True to test it works
+        check_refit: bool = False,  # Set to True to test it works
+        is_index: bool = True,
+        currency: str | None = None
+    ):
         """Create an instance of an overnight index rate swap curve given a
         valuation date and a set of OIS rates. Some of these may
         be left None and the algorithm will just use what is provided. An
@@ -131,7 +133,17 @@ class OISCurve(DiscountCurve):
         check_argument_types(getattr(self, _func_name(), None), locals())
         
         self._validate_inputs(ois_deposits, ois_fras, ois_swaps)
+
+        self._is_index = is_index
+        if is_index:
+            if not currency:
+                raise FinError("Must set `currency` for index curves")
+            self.ccy = currency
+        else:
+            self.ccy = None
+
         self._from_ql = False
+
         self._build_curve()
 
     ###############################################################################
@@ -370,6 +382,7 @@ class OISCurve(DiscountCurve):
         self._interpolator = Interpolator(self._interp_type)
         self._times = np.array([])
         self._dfs = np.array([])
+        self.pillar_dts = [self.value_dt]
 
         # time zero is now.
         t_mat = 0.0
@@ -385,6 +398,7 @@ class OISCurve(DiscountCurve):
             self._times = np.append(self._times, t_mat)
             self._dfs = np.append(self._dfs, df_mat)
             self._interpolator.fit(self._times, self._dfs)
+            self.pillar_dts.append(depo.maturity_dt)
 
         old_t_mat = t_mat
 
@@ -413,12 +427,13 @@ class OISCurve(DiscountCurve):
                     maxiter=50,
                     fprime2=None,
                 )
+            self.pillar_dts.append(fra.maturity_dt)
 
         for swap in self.used_swaps:
             # I use the lastPaymentDate in case a date has been adjusted fwd
             # over a holiday as the maturity date is usually not adjusted CHECK
-            maturity_dt = swap.fixed_leg.payment_dts[-1]
-            t_mat = (maturity_dt - self.value_dt) / g_days_in_year
+            last_payment_dt = swap.fixed_leg.payment_dts[-1]
+            t_mat = (last_payment_dt - self.value_dt) / g_days_in_year
 
             self._times = np.append(self._times, t_mat)
             self._dfs = np.append(self._dfs, df_mat)
@@ -435,6 +450,7 @@ class OISCurve(DiscountCurve):
                 fprime2=None,
                 full_output=False,
             )
+            self.pillar_dts.append(last_payment_dt)
 
         if self.check_refit is True:
             self.check_refits(1e-10, SWAP_TOL, 1e-5)

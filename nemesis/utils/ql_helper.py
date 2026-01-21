@@ -2,7 +2,8 @@ import numpy as np
 import QuantLib as ql
 from .date import Date
 from typing import Union, Tuple
-    
+
+
 def ql_date_to_date(ql_date: Union[ql.Date, list, Tuple]):
     """Convert a QuantLib Date to a Financepy Date."""
 

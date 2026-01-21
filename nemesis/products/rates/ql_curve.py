@@ -60,9 +60,11 @@ class QLCurve(DiscountCurve):
         self._interp_type = interp_type
         self.ql_curve = ql_curve
         self._is_index = is_index
-        
+
         self._build_curve_from_ql(value_dt, ql_curve, dc_type, interp_type)
 
+        if is_index:
+            self.ccy = ql_curve.index_config.currency.code()
         self._from_ql = from_ql
 
     ###############################################################################
@@ -106,11 +108,11 @@ class QLCurve(DiscountCurve):
             freq_type = FrequencyTypes.CONTINUOUS, 
             dc_type = DayCountTypes.ACT_365L
         )
-        
+
         plt.figure(figsize=(10, 6))
         plt.plot(datetime_list, zr)
         plt.scatter(pivot_points_datetime, zr_pivot)
-    
+
     ###############################################################################
 
     def _build_curve_from_ql(self, value_dt, ql_curve, dc_type, interp_type):
@@ -120,10 +122,12 @@ class QLCurve(DiscountCurve):
 
         # Extract dates and discount factors from the QuantLib curve
         curve = ql_curve.curve
-        dates = list(curve.dates())
-        for date in dates:
-            t = (ql_date_to_date(date) - value_dt) / g_days_in_year
-            df = curve.discount(date)
+        ql_pillar_dts = ql_curve.curve.dates()
+        self.pillar_dts = ql_date_to_date(ql_pillar_dts)
+
+        for ql_dt, dt in zip(ql_pillar_dts, self.pillar_dts):
+            t = (dt - value_dt) / g_days_in_year
+            df = curve.discount(ql_dt)
             times.append(t)
             dfs.append(df)
 
