@@ -14,7 +14,7 @@ T1_SETTLE_FX_PAIRS = ["USDCAD", "CADUSD", "USDPHP", "PHPUSD", "USDMNT", "MNTUSD"
 ###############################################################################
 
 
-class FxForwardCurve(DiscountCurve):
+class FXForwardCurve(DiscountCurve):
     """
     """
     
@@ -107,8 +107,8 @@ class FxForwardCurve(DiscountCurve):
 
     ###############################################################################
 
-    def get_forward(self, dt: Date):
-        return self.spot_today / self.df(dt, day_count=DayCountTypes.ACT_365F)
+    def get_forward(self, dt: Date, dc_type: DayCountTypes):
+        return self.spot_today / self.df(dt, day_count=dc_type)
 
     ###############################################################################
 
