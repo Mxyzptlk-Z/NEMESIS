@@ -1,18 +1,14 @@
 import numpy as np
 import pandas as pd
 from scipy import optimize
-from typing import Union, List, Dict
 
 from ...utils.error import FinError
 from ...utils.date import Date
 from ...utils.day_count import DayCountTypes
 from ...utils.frequency import FrequencyTypes
-from ...utils.calendar import Calendar, BusDayAdjustTypes
 from ...utils.helpers import check_argument_types, label_to_string, times_from_dates
-from ...utils.global_types import SwapTypes
 from ...market.curves.discount_curve import DiscountCurve
 from ...market.curves.interpolator import InterpTypes, Interpolator
-# from ...utils.math import test_monotonicity, g_small
 from ...utils.global_vars import g_days_in_year
 
 SWAP_TOL = 1e-10
@@ -125,36 +121,6 @@ class CCSCurve(DiscountCurve):
         self._times = np.append(self._times, 0.0)
         self._dfs = np.append(self._dfs, df_mat)
         self._interpolator.fit(self._times, self._dfs)
-
-        # if self.used_fx_swaps:
-        #     fx_swap0 = self.used_fx_swaps[0]
-
-        #     near_delivery_dt = fx_swap0.near_leg.delivery_dt
-        #     far_delivery_dt = fx_swap0.far_leg.delivery_dt
-        #     t_near = (near_delivery_dt - self.value_dt) / g_days_in_year
-        #     t_far = (far_delivery_dt - self.value_dt) / g_days_in_year
-        #     df_f_near = self.foreign_curve.df(near_delivery_dt, day_count=DayCountTypes.ACT_365F)
-        #     df_f_far = self.foreign_curve.df(far_delivery_dt, day_count=DayCountTypes.ACT_365F)
-
-        #     df_d_near = df_f_near
-        #     for _ in range(MAX_ITER):
-        #         prev_df_near = df_d_near
-        #         df_d_far = df_d_near * (df_f_far / df_f_near) * (fx_swap0.spot_fx_rate / fx_swap0.forward_fx_rate)
-
-        #         temp_times = np.append(self._times, t_far)
-        #         temp_dfs = np.append(self._dfs, df_d_far)
-        #         temp_interpolator = Interpolator(self._interp_type)
-        #         temp_interpolator.fit(temp_times, temp_dfs)
-
-        #         new_df_near = temp_interpolator.interpolate(t_near)
-        #         df_d_near = new_df_near
-
-        #         if abs(new_df_near - prev_df_near) < SWAP_TOL:
-        #             break
-
-        #     self._times = np.append(self._times, t_near)
-        #     self._dfs = np.append(self._dfs, df_d_near)
-        #     self._interpolator.fit(self._times, self._dfs)
 
         for swap in self.used_fx_swaps:
             maturity_dt = swap.far_leg.delivery_dt
