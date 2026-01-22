@@ -87,7 +87,7 @@ class FXImpliedForwardCurve:
 ###############################################################################
 
 
-class FXImpliedAssetCurve:
+class FXImpliedAssetCurve(DiscountCurve):
     def __init__(
         self,
         value_dt: Date,
@@ -115,32 +115,30 @@ class FXImpliedAssetCurve:
 
     ###############################################################################
 
-    # def _build_curve(self):
-    #     """"""
-    #     asset_dts = self.base_curve.pillar_dts
+    def _build_curve(self):
+        """"""
+        asset_dts = self.base_curve.pillar_dts
 
-    #     if not asset_dts[0] == self.value_dt:
-    #         raise FinError("The first date does not match")
+        if not asset_dts[0] == self.value_dt:
+            raise FinError("The first date does not match")
 
-    #     if self.base_curve.ccy == self.forward_curve.dom_name:
-    #         asset_dfs = [1] + [base_curve.curve.discount(d) / fx_fwd_crv.curve.discount(d) 
-    #                            for d in asset_dts[1:]]
-    #     else:
-    #         asset_dfs = [1] + [base_curve.curve.discount(d) * fx_fwd_crv.curve.discount(d)
-    #                            for d in asset_dts[1:]]
+        if self.base_curve.ccy == self.forward_curve.dom_name:
+            asset_dfs = [1] + [
+                self.base_curve.df(dt, day_count=DayCountTypes.ACT_365F) /
+                self.forward_curve.df(dt, day_count=DayCountTypes.ACT_365F) 
+                for dt in asset_dts[1:]
+            ]
+        else:
+            asset_dfs = [1] + [
+                self.base_curve.df(dt, day_count=DayCountTypes.ACT_365F) *
+                self.forward_curve.df(dt, day_count=DayCountTypes.ACT_365F)
+                for dt in asset_dts[1:]
+            ]
 
-    #     if interpolation_method == "zerolinear":
-    #         asset_zeros = [-np.log(df) / daycount.yearFraction(today, date) 
-    #                        for df, date in zip(asset_dfs[1:], asset_dates[1:])]
-    #         asset_zeros = [asset_zeros[0]] + asset_zeros
-    #         asset_crv = ql.ZeroCurve(asset_dates, asset_zeros, daycount, calendar)      
-    #     elif interpolation_method == "dfloglinear":
-    #         asset_crv = ql.DiscountCurve(asset_dates, asset_dfs, daycount, calendar)
-    #     else:
-    #         raise Exception(f'Unsupported interpolation method: {interpolation_method}')     
+        self._times = np.array([(dt - self.value_dt) / g_days_in_year for dt in asset_dts])
+        self._dfs = np.array(asset_dfs)
 
-    #     asset_crv.enableExtrapolation()
-
-    #     return asset_crv
+        self._interpolator = Interpolator(self._interp_type)
+        self._interpolator.fit(self._times, self._dfs)
 
     ###############################################################################
