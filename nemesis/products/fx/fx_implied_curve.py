@@ -1,15 +1,15 @@
 import copy
-import numpy as np
-import pandas as pd
 
-from ...utils.date import Date
-from ...utils.error import FinError
+import numpy as np
+
+from ...market.curves.discount_curve import DiscountCurve
+from ...market.curves.interpolator import Interpolator, InterpTypes
 from ...utils.calendar import CalendarTypes
+from ...utils.date import Date
 from ...utils.day_count import DayCountTypes
+from ...utils.error import FinError
 from ...utils.fx_helper import get_fx_pair_base_size
 from ...utils.global_vars import g_days_in_year
-from ...market.curves.discount_curve import DiscountCurve
-from ...market.curves.interpolator import InterpTypes, Interpolator
 
 ###############################################################################
 
@@ -75,8 +75,8 @@ class FXImpliedForwardCurve:
     #     tweaked_curve.f_dis_curve = tweaked_f_dis_curve
 
     #     return tweaked_curve
-    
-    
+
+
     # def tweak_spot(self, tweak):
     #     tweaked_curve = copy.copy(self)
     #     tweaked_curve.spot = self.spot + tweak
@@ -125,7 +125,7 @@ class FXImpliedAssetCurve(DiscountCurve):
         if self.base_curve.ccy == self.forward_curve.dom_name:
             asset_dfs = [1] + [
                 self.base_curve.df(dt, day_count=DayCountTypes.ACT_365F) /
-                self.forward_curve.df(dt, day_count=DayCountTypes.ACT_365F) 
+                self.forward_curve.df(dt, day_count=DayCountTypes.ACT_365F)
                 for dt in asset_dts[1:]
             ]
         else:

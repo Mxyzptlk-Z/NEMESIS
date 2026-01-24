@@ -2,14 +2,14 @@ import numpy as np
 import pandas as pd
 from scipy import optimize
 
-from ...utils.error import FinError
+from ...market.curves.discount_curve import DiscountCurve
+from ...market.curves.interpolator import Interpolator, InterpTypes
 from ...utils.date import Date
 from ...utils.day_count import DayCountTypes
+from ...utils.error import FinError
 from ...utils.frequency import FrequencyTypes
-from ...utils.helpers import check_argument_types, label_to_string, times_from_dates
-from ...market.curves.discount_curve import DiscountCurve
-from ...market.curves.interpolator import InterpTypes, Interpolator
 from ...utils.global_vars import g_days_in_year
+from ...utils.helpers import check_argument_types, label_to_string, times_from_dates
 
 SWAP_TOL = 1e-10
 MAX_ITER = 50
@@ -61,9 +61,9 @@ def _g(df, *args):
 class CCSCurve(DiscountCurve):
     """
     """
-    
+
     ###############################################################################
-    
+
     def __init__(
         self,
         value_dt: Date,
@@ -86,7 +86,7 @@ class CCSCurve(DiscountCurve):
         self._build_curve()
 
     ###############################################################################
-    
+
     def _validate_inputs(self, fx_swaps, ois_swaps):
         """Validate the inputs for each of the Libor products."""
 
@@ -103,9 +103,9 @@ class CCSCurve(DiscountCurve):
     ###############################################################################
 
     def _build_curve(self):
-        
+
         self._build_curve_using_1d_solver()
-        
+
     ###############################################################################
 
     def _build_curve_using_1d_solver(self):
@@ -161,7 +161,7 @@ class CCSCurve(DiscountCurve):
                 fprime2=None,
                 full_output=False,
             )
-        
+
         self._interpolator.fit(self._times, self._dfs)
 
     ###############################################################################
@@ -170,8 +170,8 @@ class CCSCurve(DiscountCurve):
         """Print a table of zero rate and discount factor on pivot dates."""
 
         zr = self.zero_rate(
-            payment_dt, 
-            freq_type = FrequencyTypes.CONTINUOUS, 
+            payment_dt,
+            freq_type = FrequencyTypes.CONTINUOUS,
             dc_type = DayCountTypes.ACT_365F
         )
 
@@ -181,5 +181,5 @@ class CCSCurve(DiscountCurve):
         curve_result = pd.DataFrame({"Date": payment_dt_datetime, "ZR": (zr*100).round(5), "DF": df.round(6)})
 
         return curve_result
-    
+
     ###############################################################################

@@ -1,13 +1,13 @@
 import numpy as np
 import pandas as pd
 
-from ...utils.date import Date
+from ...market.curves.discount_curve import DiscountCurve
+from ...market.curves.interpolator import Interpolator, InterpTypes
 from ...utils.calendar import CalendarTypes
+from ...utils.date import Date
 from ...utils.day_count import DayCountTypes
 from ...utils.fx_helper import get_fx_pair_base_size
 from ...utils.global_vars import g_days_in_year
-from ...market.curves.discount_curve import DiscountCurve
-from ...market.curves.interpolator import InterpTypes, Interpolator
 
 T1_SETTLE_FX_PAIRS = ["USDCAD", "CADUSD", "USDPHP", "PHPUSD", "USDMNT", "MNTUSD", "USDRUB", "RUBUSD"]
 
@@ -17,7 +17,7 @@ T1_SETTLE_FX_PAIRS = ["USDCAD", "CADUSD", "USDPHP", "PHPUSD", "USDMNT", "MNTUSD"
 class FXForwardCurve(DiscountCurve):
     """
     """
-    
+
     ###############################################################################
 
     def __init__(
@@ -76,14 +76,14 @@ class FXForwardCurve(DiscountCurve):
                 self.spot_dt = on_settle_dt
             else:
                 self.spot_dt = None
-            
+
         fwd_point_base = get_fx_pair_base_size(self.currency_pair)
 
         fx_fwd_data_after_spot = self.fx_fwd_data[self.fx_fwd_data["SettleDate"] > self.spot_dt].copy()
         fx_fwd_data_after_spot = fx_fwd_data_after_spot.drop_duplicates(subset=["SettleDate"], keep="last")
         fx_fwd_points = fx_fwd_data_after_spot["Spread"].tolist()
         fx_fwd_dts = fx_fwd_data_after_spot["SettleDate"].tolist()
-            
+
         if self.currency_pair in T1_SETTLE_FX_PAIRS:
             fx_fwd_points = [-on_spread, 0.0] + fx_fwd_points
             fx_fwd_dts = [self.value_dt, self.spot_dt] + fx_fwd_dts
@@ -153,9 +153,9 @@ class FXForwardCurve(DiscountCurve):
     #     calendar = self.calendar
     #     daycount = self.daycount
     #     for i in range(len(tweaked_curve.fx_fwd_dfs)):
-    #         dccy_df_orig = (dccy_curve_orig.curve.discount(fx_fwd_dates[i]) / 
+    #         dccy_df_orig = (dccy_curve_orig.curve.discount(fx_fwd_dates[i]) /
     #                         dccy_curve_orig.curve.discount(today))
-    #         dccy_df_tweaked = (dccy_curve_tweaked.curve.discount(fx_fwd_dates[i]) / 
+    #         dccy_df_tweaked = (dccy_curve_tweaked.curve.discount(fx_fwd_dates[i]) /
     #                            dccy_curve_tweaked.curve.discount(today))
     #         tweaked_curve.fx_fwd_dfs[i] *= dccy_df_tweaked / dccy_df_orig
 

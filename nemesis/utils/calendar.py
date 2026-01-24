@@ -1,6 +1,8 @@
 import datetime
-from chinese_calendar import is_holiday
 from enum import Enum
+
+from chinese_calendar import is_holiday
+
 from .date import Date
 from .error import FinError
 
@@ -311,7 +313,7 @@ class Calendar:
     def holiday_5u(self, dt: Date):
 
         holiday_list = [Date(20,6,2022), Date(20,6,2033), Date(20,6,2039), Date(20,6,2044), Date(20,6,2050)]
-        
+
         if dt.is_weekend() or dt in holiday_list:
             return True
         else:
@@ -878,7 +880,7 @@ class Calendar:
 
         if m == 5 and d >= 25 and d <= 31 and weekday == Date.MON:  # MD
             return True
-        
+
         if m == 6 and d == 19:  # Juneteenth day
             return True
 
@@ -1055,7 +1057,7 @@ class Calendar:
 
     def holiday_china(self, dt: Date):
         """ Chiense legal holidays, exclude weekends."""
-        
+
         m = dt.m
         d = dt.d
         y = dt.y
@@ -1175,11 +1177,11 @@ class JointCalendar:
         """
         if not calendar_types or not all(isinstance(c, CalendarTypes) for c in calendar_types):
             raise FinError("JointCalendar 需要至少一个 CalendarTypes 枚举值")
-        
+
         # 存储子日历对象和类型
         self.calendars = [Calendar(cal_type) for cal_type in calendar_types]
         self.calendar_types = calendar_types
-        
+
         # 添加 value 属性，使其更像 CalendarTypes 枚举值
         self.value = CalendarTypes.JOINT.value
         self.name = "JOINT"
@@ -1225,14 +1227,14 @@ class JointCalendar:
         start_dt = Date(1, 1, year)
         end_dt = Date(1, 1, year + 1)
         holiday_list = []
-        
+
         while start_dt < end_dt:
             # 使用联合日历的业务日判断逻辑
             if self.is_business_day(start_dt) is False and start_dt.is_weekend() is False:
                 holiday_list.append(start_dt.__str__())
-            
+
             start_dt = start_dt.add_days(1)
-        
+
         return holiday_list
 
     def __str__(self):

@@ -1,10 +1,6 @@
-import numpy as np
-
 from ...utils.date import Date
-from ...utils.global_vars import g_days_in_year
 from ...utils.error import FinError
-from ...utils.helpers import label_to_string, check_argument_types
-
+from ...utils.helpers import check_argument_types, label_to_string
 from .fx_forward import FXForward
 
 ###############################################################################

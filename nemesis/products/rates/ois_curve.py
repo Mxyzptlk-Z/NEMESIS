@@ -1,21 +1,20 @@
 import copy
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import optimize
-import matplotlib.pyplot as plt
 
-from ...utils.error import FinError
-from ...utils.date import Date
-from ...utils.day_count import DayCountTypes
-from ...utils.frequency import FrequencyTypes
-from ...utils.helpers import label_to_string
-from ...utils.helpers import check_argument_types, _func_name
-from ...utils.global_vars import g_days_in_year
-from ...market.curves.interpolator import InterpTypes, Interpolator
 from ...market.curves.discount_curve import DiscountCurve
-
+from ...market.curves.interpolator import Interpolator, InterpTypes
 from ...products.rates.ibor_deposit import IborDeposit
 from ...products.rates.ois import OIS
+from ...utils.date import Date
+from ...utils.day_count import DayCountTypes
+from ...utils.error import FinError
+from ...utils.frequency import FrequencyTypes
+from ...utils.global_vars import g_days_in_year
+from ...utils.helpers import _func_name, check_argument_types, label_to_string
 
 SWAP_TOL = 1e-10
 
@@ -131,7 +130,7 @@ class OISCurve(DiscountCurve):
         self._interpolator = None
 
         check_argument_types(getattr(self, _func_name(), None), locals())
-        
+
         self._validate_inputs(ois_deposits, ois_fras, ois_swaps)
 
         self._is_index = is_index
@@ -150,15 +149,15 @@ class OISCurve(DiscountCurve):
 
     def print_table(self, payment_dt: list):
         """Print a table of zero rate and discount factor on pivot dates."""
-            
+
         zr = self.zero_rate(
-            payment_dt, 
-            freq_type = FrequencyTypes.CONTINUOUS, 
+            payment_dt,
+            freq_type = FrequencyTypes.CONTINUOUS,
             dc_type = DayCountTypes.ACT_365F
         )
-            
+
         df = self.df(payment_dt, day_count = DayCountTypes.ACT_365F)
-        
+
         payment_dt_datetime = [dt.datetime() for dt in payment_dt]
         curve_result = pd.DataFrame({"Date": payment_dt_datetime, "ZR": (zr*100).round(5), "DF": df.round(6)})
 
@@ -177,17 +176,17 @@ class OISCurve(DiscountCurve):
         pivot_points_datetime = [dt.datetime() for dt in pivot_points]
 
         zr = self.zero_rate(
-            date_list, 
-            freq_type = FrequencyTypes.CONTINUOUS, 
+            date_list,
+            freq_type = FrequencyTypes.CONTINUOUS,
             dc_type = DayCountTypes.ACT_365L
         )
 
         zr_pivot = self.zero_rate(
-            pivot_points, 
-            freq_type = FrequencyTypes.CONTINUOUS, 
+            pivot_points,
+            freq_type = FrequencyTypes.CONTINUOUS,
             dc_type = DayCountTypes.ACT_365L
         )
-        
+
         plt.figure(figsize=(10, 6))
         plt.plot(datetime_list, zr)
         plt.scatter(pivot_points_datetime, zr_pivot)
@@ -199,7 +198,7 @@ class OISCurve(DiscountCurve):
 
         self._build_curve_using_1d_solver()
         # self._build_curve_linear_swap_rate_interpolation()
-    
+
     ###############################################################################
 
     def _validate_inputs(self, ois_deposits, ois_fras, ois_swaps):

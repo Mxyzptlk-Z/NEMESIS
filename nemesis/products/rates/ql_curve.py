@@ -1,23 +1,19 @@
 import copy
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import optimize
-import matplotlib.pyplot as plt
 
-from ...utils.error import FinError
+from ...market.curves.discount_curve import DiscountCurve
+from ...market.curves.interpolator import Interpolator, InterpTypes
 from ...utils.date import Date
 from ...utils.day_count import DayCountTypes
+from ...utils.error import FinError
 from ...utils.frequency import FrequencyTypes
-from ...utils.helpers import label_to_string
-from ...utils.helpers import check_argument_types, _func_name
 from ...utils.global_vars import g_days_in_year
+from ...utils.helpers import _func_name, check_argument_types, label_to_string
 from ...utils.ql_helper import ql_date_to_date
-from ...market.curves.interpolator import InterpTypes, Interpolator
-from ...market.curves.discount_curve import DiscountCurve
-
-from ...products.rates.ibor_deposit import IborDeposit
-from ...products.rates.ois import OIS
-
 
 ###############################################################################
 
@@ -40,8 +36,8 @@ class QLCurve(DiscountCurve):
     def __init__(
         self,
         value_dt: Date,
-        ql_curve, 
-        dc_type: DayCountTypes = DayCountTypes.ACT_360, 
+        ql_curve,
+        dc_type: DayCountTypes = DayCountTypes.ACT_360,
         interp_type: InterpTypes = InterpTypes.LINEAR_ZERO_RATES,
         from_ql: bool = True,
         is_index: bool = True,
@@ -73,13 +69,13 @@ class QLCurve(DiscountCurve):
         """Print a table of zero rate and discount factor on pivot dates."""
 
         zr = self.zero_rate(
-            payment_dt, 
-            freq_type = FrequencyTypes.CONTINUOUS, 
+            payment_dt,
+            freq_type = FrequencyTypes.CONTINUOUS,
             dc_type = DayCountTypes.ACT_365F
         )
 
         df = self.df(payment_dt, day_count = DayCountTypes.ACT_365F)
-        
+
         payment_dt_datetime = [dt.datetime() for dt in payment_dt]
         curve_result = pd.DataFrame({"Date": payment_dt_datetime, "ZR": (zr*100).round(5), "DF": df.round(6)})
 
@@ -98,14 +94,14 @@ class QLCurve(DiscountCurve):
         pivot_points_datetime = [dt.datetime() for dt in pivot_points]
 
         zr = self.zero_rate(
-            date_list, 
-            freq_type = FrequencyTypes.CONTINUOUS, 
+            date_list,
+            freq_type = FrequencyTypes.CONTINUOUS,
             dc_type = DayCountTypes.ACT_365L
         )
 
         zr_pivot = self.zero_rate(
-            pivot_points, 
-            freq_type = FrequencyTypes.CONTINUOUS, 
+            pivot_points,
+            freq_type = FrequencyTypes.CONTINUOUS,
             dc_type = DayCountTypes.ACT_365L
         )
 
@@ -166,7 +162,7 @@ class QLCurve(DiscountCurve):
             )
 
         return s
-    
+
     ###############################################################################
 
     def _print(self):
