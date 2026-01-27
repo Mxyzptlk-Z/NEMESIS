@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import pandas as pd
 
@@ -5,7 +6,7 @@ from ...market.curves.discount_curve import DiscountCurve
 from ...market.curves.interpolator import Interpolator, InterpTypes
 from ...utils.calendar import CalendarTypes
 from ...utils.date import Date
-from ...utils.day_count import DayCountTypes
+from ...utils.day_count import DayCount, DayCountTypes
 from ...utils.fx_helper import get_fx_pair_base_size
 from ...utils.global_vars import g_days_in_year
 
@@ -97,7 +98,11 @@ class FXForwardCurve(DiscountCurve):
                 fx_fwd_dts = [self.value_dt, self.spot_dt] + fx_fwd_dts
 
         self.fx_fwds = [self.spot_fx_rate + s / fwd_point_base for s in fx_fwd_points]
-        self._times = np.array([(dt - self.value_dt) / g_days_in_year for dt in fx_fwd_dts])
+        self.fx_fwd_dts = fx_fwd_dts
+
+        day_count = DayCount(self.dc_type)
+        self._times = np.array([day_count.year_frac(self.value_dt, dt)[0] for dt in fx_fwd_dts])
+        # self._times = np.array([(dt - self.value_dt) / g_days_in_year for dt in fx_fwd_dts])
 
         self.spot_today = self.fx_fwds[0]
         self._dfs = np.array([self.spot_today / fx_fwd for fx_fwd in self.fx_fwds])
@@ -117,50 +122,29 @@ class FXForwardCurve(DiscountCurve):
 
     ###############################################################################
 
-    # def tweak_spot(self, tweak):
-    #     tweaked_curve = copy.copy(self)
-    #     tweaked_curve.spot_today = self.spot_today * (self.spot + tweak) / self.spot
-    #     tweaked_curve.spot = self.spot + tweak
+    def bump_spot(self, bump):
+        bumped_curve = copy.deepcopy(self)
+        bumped_curve.spot_today = self.spot_today * (self.spot_fx_rate + bump) / self.spot_fx_rate
+        bumped_curve.spot_fx_rate = self.spot_fx_rate + bump
+        return bumped_curve
 
-    #     return tweaked_curve
+    ###############################################################################
 
+    # rd up or rf down
+    def bump_parallel(self, bump):
+        bumped_curve = copy.deepcopy(self)
+        bumped_curve._dfs *= np.exp(-bump * bumped_curve._times)
+        bumped_curve.spot_fx_rate = bumped_curve.get_forward(self.spot_dt, self.dc_type)
+        return bumped_curve
 
-    # # rd up or rf down
-    # def tweak_parallel(self, tweak):
-    #     tweaked_curve = copy.copy(self)
-    #     tweaked_curve.fx_fwd_dfs = copy.deepcopy(self.fx_fwd_dfs)
-    #     today = self.today
-    #     fx_fwd_dates = self.fx_fwd_dates
-    #     calendar = self.calendar
-    #     daycount = self.daycount
-    #     for i in range(len(tweaked_curve.fx_fwd_dfs)):
-    #         tweaked_curve.fx_fwd_dfs[i] *= np.exp(-tweak * daycount.yearFraction(today, fx_fwd_dates[i]))
+    ###############################################################################
 
-    #     curve = ql.DiscountCurve(fx_fwd_dates, tweaked_curve.fx_fwd_dfs, daycount, calendar)
-    #     curve.enableExtrapolation()
-    #     tweaked_curve.curve = curve
-    #     tweaked_curve.spot = tweaked_curve.get_forward(self.spot_date)
+    # forward curve after domestic curve bump
+    def bump_domestic_curve(self, domestic_curve_pre, domestic_curve_bumped):
+        bumped_curve = copy.deepcopy(self)
+        dom_df_pre = domestic_curve_pre.df(self.fx_fwd_dts, self.dc_type) / domestic_curve_pre.df(self.value_dt, self.dc_type)
+        dom_df_bumped = domestic_curve_bumped.df(self.fx_fwd_dts, self.dc_type) / domestic_curve_bumped.df(self.value_dt, self.dc_type)
+        bumped_curve._dfs *= dom_df_bumped / dom_df_pre
+        return bumped_curve
 
-    #     return tweaked_curve
-
-
-    # # forward curve after dccy curve tweak
-    # def tweak_dccy_curve(self, dccy_curve_orig, dccy_curve_tweaked):
-    #     tweaked_curve = copy.copy(self)
-    #     tweaked_curve.fx_fwd_dfs = copy.deepcopy(self.fx_fwd_dfs)
-    #     today = self.today
-    #     fx_fwd_dates = self.fx_fwd_dates
-    #     calendar = self.calendar
-    #     daycount = self.daycount
-    #     for i in range(len(tweaked_curve.fx_fwd_dfs)):
-    #         dccy_df_orig = (dccy_curve_orig.curve.discount(fx_fwd_dates[i]) /
-    #                         dccy_curve_orig.curve.discount(today))
-    #         dccy_df_tweaked = (dccy_curve_tweaked.curve.discount(fx_fwd_dates[i]) /
-    #                            dccy_curve_tweaked.curve.discount(today))
-    #         tweaked_curve.fx_fwd_dfs[i] *= dccy_df_tweaked / dccy_df_orig
-
-    #     curve = ql.DiscountCurve(fx_fwd_dates, tweaked_curve.fx_fwd_dfs, daycount, calendar)
-    #     curve.enableExtrapolation()
-    #     tweaked_curve.curve = curve
-
-    #     return tweaked_curve
+    ###############################################################################

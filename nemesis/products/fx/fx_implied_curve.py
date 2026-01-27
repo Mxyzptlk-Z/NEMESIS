@@ -6,7 +6,7 @@ from ...market.curves.discount_curve import DiscountCurve
 from ...market.curves.interpolator import Interpolator, InterpTypes
 from ...utils.calendar import CalendarTypes
 from ...utils.date import Date
-from ...utils.day_count import DayCountTypes
+from ...utils.day_count import DayCount, DayCountTypes
 from ...utils.error import FinError
 from ...utils.fx_helper import get_fx_pair_base_size
 from ...utils.global_vars import g_days_in_year
@@ -136,7 +136,10 @@ class FXImpliedAssetCurve(DiscountCurve):
                 for dt in asset_dts[1:]
             ]
 
-        self._times = np.array([(dt - self.value_dt) / g_days_in_year for dt in asset_dts])
+        day_count = DayCount(self.dc_type)
+
+        self._times = np.array([day_count.year_frac(self.value_dt, dt)[0] for dt in asset_dts])
+        # self._times = np.array([(dt - self.value_dt) / g_days_in_year for dt in asset_dts])
         self._dfs = np.array(asset_dfs)
 
         self._interpolator = Interpolator(self._interp_type)
