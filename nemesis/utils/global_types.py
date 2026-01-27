@@ -17,12 +17,14 @@ class OptionTypes(Enum):
     EUROPEAN_PUT = 2
     AMERICAN_CALL = 3
     AMERICAN_PUT = 4
-    DIGITAL_CALL = 5
-    DIGITAL_PUT = 6
-    ASIAN_CALL = 7
-    ASIAN_PUT = 8
-    COMPOUND_CALL = 9
-    COMPOUND_PUT = 10
+    BINARY_CALL = 5
+    BINARY_PUT = 6
+    DIGITAL_CALL = 7
+    DIGITAL_PUT = 8
+    ASIAN_CALL = 9
+    ASIAN_PUT = 10
+    COMPOUND_CALL = 11
+    COMPOUND_PUT = 12
 
 ###############################################################################
 
