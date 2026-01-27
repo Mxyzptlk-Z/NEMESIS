@@ -1,5 +1,3 @@
-from enum import Enum
-
 import numpy as np
 from numba import njit, float64
 
@@ -10,67 +8,73 @@ from ..utils.global_types import OptionTypes
 from ..utils.error import FinError
 
 
-class BlackTypes(Enum):
-    ANALYTICAL = 1
-    CRR_TREE = 2
+class Black:
+    """
+    Black's Model which prices call and put options in the forward
+    measure according to the Black-Scholes equation.
+    """
 
+    APPLICABLE_TYPES = [OptionTypes.EUROPEAN_CALL, OptionTypes.EUROPEAN_PUT,
+                        OptionTypes.BINARY_CALL, OptionTypes.BINARY_PUT]
 
-class Black():
-    """ Black's Model which prices call and put options in the forward
-    measure according to the Black-Scholes equation. """
+    def __init__(
+        self,
+        forward_rate,   # Forward Rate F
+        strike_rate,    # Strike Rate K
+        time_to_expiry,  # Time to Expiry (years)
+        volatility,  # Volatility σ
+        df,  # df RFR to expiry date
+        option_type: OptionTypes
+    ):
+        """Create FinModel black using parameters."""
+        if option_type in self.APPLICABLE_TYPES:
+            raise FinError(f"Option type must be one of {self.APPLICABLE_TYPES}")
 
-    def __init__(self, volatility, implementation_type=BlackTypes.ANALYTICAL,
-                 num_steps=0):
-        """ Create FinModel black using parameters. """
-        self.volatility = volatility
-        self.implementation_type = implementation_type
-        self.num_steps = num_steps
-        self.seed = 0
-        self.param1 = 0
-        self.param2 = 0
+        self.f = forward_rate
+        self.t = time_to_expiry
+        self.k = strike_rate
+        self.v = volatility
+        self.r = -np.log(df) / time_to_expiry
+        self.option_type = option_type
 
-###############################################################################
+    ###############################################################################
 
-    def value(self,
-              forward_rate,   # Forward rate F
-              strike_rate,    # Strike Rate K
-              time_to_expiry,  # Time to Expiry (years)
-              df,  # df RFR to expiry date
-              option_type):    # Call or put
-        """ Price a derivative using Black's model which values in the forward
-        measure following a change of measure. """
+    def value_vanilla(self):
+        """
+        Price a vanilla option using Black's model which values in the forward
+        measure following a change of measure.
+        """
+        return vanilla(self.f, self.t, self.k, self.r, self.v, self.option_type)
 
-        f = forward_rate
-        t = time_to_expiry
-        k = strike_rate
-        v = self.volatility
-        r = -np.log(df)/t
-        if option_type in (OptionTypes.EUROPEAN_CALL,
-                           OptionTypes.EUROPEAN_PUT):
-            if self.implementation_type == BlackTypes.ANALYTICAL:
-                value = black_value(f, t, k, r, v, option_type)
-            else:
-                raise FinError("Implementation not available for this product")
+    ###############################################################################
 
-        else:
-            raise FinError(
-                "Option type must be a European Call or Put")
-        return value
+    def value_cash_or_nothing(self, cash):
+        """
+        Price a cash-or-nothing binary option using Black's model which values
+        in the forward measure following a change of measure.
+        """
+        return cash_or_nothing(cash, self.f, self.t, self.k, self.r, self.v, self.option_type)
 
-###############################################################################
+    ###############################################################################
+
+    def value_asset_or_nothing(self, f_pay):
+        """
+        Price a asset-or-nothing binary option using Black's model which values
+        in the forward measure following a change of measure.
+        """
+        return asset_or_nothing(f_pay, self.f, self.t, self.k, self.r, self.v, self.option_type)
+
+    ###############################################################################
 
     def __repr__(self):
         s = label_to_string("OBJECT TYPE", type(self).__name__)
-        s += label_to_string("VOLATILITY", self.volatility)
-        s += label_to_string("IMPLEMENTATION", self.implementation_type)
-        s += label_to_string("NUMSTEPS", self.num_steps)
         return s
 
-###############################################################################
+    ###############################################################################
 
 
-def black_value(fwd, t, k, r, v, option_type):
-    """ Price a derivative using Black model. """
+def vanilla(fwd, t, k, r, v, option_type):
+    """Price a vanilla option using Black model."""
     d1, d2 = calculate_d1_d2(fwd, t, k, v)
     if option_type == OptionTypes.EUROPEAN_CALL:
         return np.exp(-r*t) * (fwd * n_vect(d1) - k * n_vect(d2))
@@ -78,6 +82,28 @@ def black_value(fwd, t, k, r, v, option_type):
         return np.exp(-r*t) * (k * n_vect(-d2) - fwd * n_vect(-d1))
     else:
         raise FinError("Option type must be a European Call or Put")
+
+
+def cash_or_nothing(cash, fwd, t, k, r, v, option_type):
+    """Price a binary cash-or-nothing option using Black model."""
+    _, d2 = calculate_d1_d2(fwd, t, k, v)
+    if option_type == OptionTypes.BINARY_CALL:
+        return cash * np.exp(-r*t) * n_vect(d2)
+    elif option_type == OptionTypes.BINARY_PUT:
+        return cash * np.exp(-r*t) * n_vect(-d2)
+    else:
+        raise FinError("Option type must be a Binary Call or Put")
+
+
+def asset_or_nothing(f_pay, fwd, t, k, r, v, option_type):
+    """Price a binary asset-or-nothing option using Black model."""
+    d1, _ = calculate_d1_d2(fwd, t, k, v)
+    if option_type == OptionTypes.BINARY_CALL:
+        return f_pay * np.exp(-r*t) * n_vect(d1)
+    elif option_type == OptionTypes.BINARY_PUT:
+        return f_pay * np.exp(-r*t) * n_vect(-d1)
+    else:
+        raise FinError("Option type must be a Binary Call or Put")
 
 
 @njit(float64[:](float64, float64, float64, float64), fastmath=True,
@@ -99,4 +125,3 @@ def calculate_d1_d2(f, t, k, v):
     d2 = d1 - vol * sqrt_t
 
     return np.array([d1, d2])
-
