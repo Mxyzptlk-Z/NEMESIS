@@ -10,6 +10,7 @@ from ...utils.day_count import DayCountTypes
 from ...utils.error import FinError
 from ...utils.fx_helper import get_fx_pair_base_size
 from ...utils.global_vars import g_days_in_year
+from .fx_forward_curve import FXForwardCurve
 
 ###############################################################################
 
@@ -92,7 +93,7 @@ class FXImpliedAssetCurve(DiscountCurve):
         self,
         value_dt: Date,
         base_curve: DiscountCurve,
-        forward_curve: DiscountCurve,
+        forward_curve: FXForwardCurve,
         cal_type: CalendarTypes,
         dc_type: DayCountTypes,
         interp_type: InterpTypes,
