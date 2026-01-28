@@ -60,29 +60,28 @@ class FXImpliedForwardCurve:
 
     ###############################################################################
 
-    # # forward curve after dccy curve tweak
-    # def tweak_dccy_curve(self, tweak):
-    #     tweaked_curve = copy.copy(self)
-    #     tweaked_d_dis_curve = self.d_dis_curve.tweak_parallel(tweak)
-    #     tweaked_curve.d_dis_curve = tweaked_d_dis_curve
+    # forward curve after domestic curve bump
+    def bump_domestic_curve(self, bump):
+        bumped_curve = copy.deepcopy(self)
+        bumped_domestic_curve = self.domestic_curve.bump_parallel(bump)
+        bumped_curve.domestic_curve = bumped_domestic_curve
+        return bumped_curve
 
-    #     return tweaked_curve
+    ###############################################################################
 
+    # forward curve after foreign curve bump
+    def bump_foreign_curve(self, bump):
+        bumped_curve = copy.deepcopy(self)
+        bumped_foreign_curve = self.foreign_curve.bump_parallel(bump)
+        bumped_curve.foreign_curve = bumped_foreign_curve
+        return bumped_curve
 
-    # # forward curve after fccy curve tweak
-    # def tweak_fccy_curve(self, tweak):
-    #     tweaked_curve = copy.copy(self)
-    #     tweaked_f_dis_curve = self.f_dis_curve.tweak_parallel(tweak)
-    #     tweaked_curve.f_dis_curve = tweaked_f_dis_curve
+    ###############################################################################
 
-    #     return tweaked_curve
-
-
-    # def tweak_spot(self, tweak):
-    #     tweaked_curve = copy.copy(self)
-    #     tweaked_curve.spot = self.spot + tweak
-
-    #     return tweaked_curve
+    def bump_spot(self, bump):
+        bumped_curve = copy.deepcopy(self)
+        bumped_curve.spot_fx_rate = self.spot_fx_rate + bump
+        return bumped_curve
 
 
 ###############################################################################
@@ -144,5 +143,26 @@ class FXImpliedAssetCurve(DiscountCurve):
 
         self._interpolator = Interpolator(self._interp_type)
         self._interpolator.fit(self._times, self._dfs)
+
+    ###############################################################################
+
+    def bump_parallel(self, bump, inplace=False):
+        if inplace:
+            self._dfs *= np.exp(-bump * self._times)
+            self._interpolator.fit(self._times, self._dfs)
+            return self
+        else:
+            # bumped_curve = FXImpliedAssetCurve(
+            #     value_dt=self.value_dt,
+            #     base_curve=self.base_curve,
+            #     forward_curve=self.forward_curve,
+            #     cal_type=self.cal_type,
+            #     dc_type=self.dc_type,
+            #     interp_type=self._interp_type
+            # )
+            bumped_curve = copy.copy(self)
+            bumped_curve._dfs *= np.exp(-bump * bumped_curve._times)
+            bumped_curve._interpolator.fit(bumped_curve._times, bumped_curve._dfs)
+            return bumped_curve
 
     ###############################################################################

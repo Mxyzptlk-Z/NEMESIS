@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import norm
 from numba import njit, float64
 
 from ..utils.math import n_vect, n_prime_vect
@@ -77,9 +78,11 @@ def black_value(fwd, t, k, r, v, option_type):
     """Price a vanilla option using Black model."""
     d1, d2 = calculate_d1_d2(fwd, t, k, v)
     if option_type == OptionTypes.EUROPEAN_CALL:
-        return np.exp(-r*t) * (fwd * n_vect(d1) - k * n_vect(d2))
+        # return np.exp(-r*t) * (fwd * n_vect(d1) - k * n_vect(d2))
+        return np.exp(-r*t) * (fwd * norm.cdf(d1) - k * norm.cdf(d2))
     elif option_type == OptionTypes.EUROPEAN_PUT:
-        return np.exp(-r*t) * (k * n_vect(-d2) - fwd * n_vect(-d1))
+        # return np.exp(-r*t) * (k * n_vect(-d2) - fwd * n_vect(-d1))
+        return np.exp(-r*t) * (k * norm.cdf(-d2) - fwd * norm.cdf(-d1))
     else:
         raise FinError("Option type must be a European Call or Put")
 

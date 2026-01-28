@@ -49,6 +49,8 @@ class FXVanillaOption(FXOption):
 
         check_argument_types(self.__init__, locals())
 
+        super().__init__(currency_pair, cal_type)
+
         calendar = Calendar(cal_type)
         delivery_dt = calendar.add_business_days(expiry_dt, spot_days)
 
@@ -111,10 +113,10 @@ class FXVanillaOption(FXOption):
         if value_dt > self.expiry_dt:
             raise FinError("Valuation date after expiry date.")
 
-        if domestic_curve.value_dt != value_dt:
-            raise FinError(
-                "Domestic Curve valuation date not same as valuation date"
-            )
+        # if domestic_curve.value_dt != value_dt:
+        #     raise FinError(
+        #         "Domestic Curve valuation date not same as valuation date"
+        #     )
 
         day_count = DayCount(dc_type)
         t_exp = day_count.year_frac(value_dt, self.expiry_dt)[0]
@@ -124,7 +126,7 @@ class FXVanillaOption(FXOption):
 
         t_exp = np.maximum(t_exp, 1e-10)
 
-        dom_df = domestic_curve.df(self.delivery_dt, dc_type)
+        dom_df = domestic_curve.df(self.delivery_dt, dc_type) / domestic_curve.df(value_dt, dc_type)
         r_d = -np.log(dom_df) / t_exp
 
         k = self.strike_fx_rate
@@ -167,7 +169,7 @@ class FXVanillaOption(FXOption):
         pct_for = vdf / spot_fx_rate
 
         return {
-            "v": vdf,
+            "value": vdf,
             "cash_dom": cash_dom,
             "cash_for": cash_for,
             "pips_dom": pips_dom,

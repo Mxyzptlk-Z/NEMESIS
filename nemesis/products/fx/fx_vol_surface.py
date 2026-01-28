@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import pandas as pd
 from scipy import optimize
@@ -11,7 +12,8 @@ from ...utils.day_count import DayCount, DayCountTypes
 from ...utils.error import FinError
 from .fx_forward_curve import FXForwardCurve
 
-###############################################################################
+
+##########################################################################
 
 
 class SigmaSolver:
@@ -71,6 +73,8 @@ class SigmaSolver:
                 smile.index, smile ** 2 * t, fill_value="extrapolate"
             )
 
+    ###########################################################################
+
     def target_func(self, sigma: float) -> float:
         """
         Target function for root-finding.
@@ -112,6 +116,8 @@ class SigmaSolver:
             adjusted_sigma = np.sqrt(interp_sigma_sq_t / self.T)
 
         return sigma - adjusted_sigma
+
+    ###########################################################################
 
     def solve_sigma(self, initial_guess: float) -> float:
         """
@@ -226,6 +232,11 @@ class FXVolSurface:
         # Transform RR/BF data to Call/Put volatilities
         self.vol_data = self._build_vol_data()
 
+        # Store bump value for surface bump
+        self._vol_bump = 0.0
+
+    ###########################################################################
+
     def _build_vol_data(self) -> pd.DataFrame:
         """
         Transform RR/BF format volatility data to Call/Put delta format.
@@ -302,6 +313,8 @@ class FXVolSurface:
 
         return vol_data
 
+    ###########################################################################
+
     def _tenor_to_year_fraction(self, tenor: str) -> float:
         """
         Convert a tenor string to year fraction.
@@ -319,6 +332,8 @@ class FXVolSurface:
         expiry_dt = self.value_dt.add_tenor(tenor)
         expiry_dt = self._calendar.adjust(expiry_dt, BusDayAdjustTypes.FOLLOWING)
         return self._day_count.year_frac(self.value_dt, expiry_dt)[0]
+
+    ###########################################################################
 
     def _get_atm_term_sigma(self, t: float) -> float:
         """
@@ -342,6 +357,8 @@ class FXVolSurface:
             atm_term_sigma = 1e-4
 
         return float(atm_term_sigma)
+
+    ###########################################################################
 
     def interp_vol(self, expiry_dt: Date, strike: float) -> float:
         """
@@ -375,7 +392,20 @@ class FXVolSurface:
         solver = SigmaSolver(T, df_f, strike, forward, self.vol_data)
         sigma = solver.solve_sigma(sigma)
 
-        return float(sigma)
+        return float(sigma) + self._vol_bump
+
+    ###########################################################################
+
+    def bump_volatility(self, bump, inplace=False):
+        if inplace:
+            self._vol_bump += bump
+            return self
+        else:
+            bumped_surface = copy.copy(self)
+            bumped_surface._vol_bump += bump
+            return bumped_surface
+
+    ###########################################################################
 
     def __repr__(self) -> str:
         s = "FX VOLATILITY SURFACE\n"
@@ -387,4 +417,4 @@ class FXVolSurface:
         return s
 
 
-###############################################################################
+##########################################################################

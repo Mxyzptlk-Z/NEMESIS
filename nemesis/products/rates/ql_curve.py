@@ -145,6 +145,62 @@ class QLCurve(DiscountCurve):
 
     ###############################################################################
 
+    def bump_parallel(self, bump, inplace=False):
+        """Bump all market quotes in parallel and rebuild curve."""
+        bumped_ql_curve = self.ql_curve.tweak_parallel(bump)
+
+        if inplace:
+            self.ql_curve = bumped_ql_curve
+            self._build_curve_from_ql(self.value_dt, bumped_ql_curve, self.dc_type, self._interp_type)
+            return self
+        else:
+            return QLCurve(
+                value_dt=self.value_dt,
+                ql_curve=bumped_ql_curve,
+                dc_type=self.dc_type,
+                interp_type=self._interp_type,
+                from_ql=self._from_ql,
+                is_index=self._is_index
+            )
+            # return self.from_bump(self, bump)
+
+    ###############################################################################
+
+    def bump_curve(self, bump, inplace=False):
+        bumped_ql_curve = self.ql_curve.tweak_discount_curve(bump)
+
+        if inplace:
+            self.ql_curve = bumped_ql_curve
+            self._build_curve_from_ql(self.value_dt, bumped_ql_curve, self.dc_type, self._interp_type)
+            return self
+        else:
+            return QLCurve(
+                value_dt=self.value_dt,
+                ql_curve=bumped_ql_curve,
+                dc_type=self.dc_type,
+                interp_type=self._interp_type,
+                from_ql=self._from_ql,
+                is_index=self._is_index
+            )
+            # return self.from_bump(self, bump)
+
+    ###############################################################################
+
+    @classmethod
+    def from_bump(cls, curve, bump):
+        """Create a curve by applying a bump to an existing curve."""
+        bumped_ql_curve = curve.ql_curve.tweak_parallel(bump)
+        return cls(
+            value_dt=curve.value_dt,
+            ql_curve=bumped_ql_curve,
+            dc_type=curve.dc_type,
+            interp_type=curve._interp_type,
+            from_ql=curve._from_ql,
+            is_index=curve._is_index
+        )
+
+    ###############################################################################
+
     def __repr__(self):
         """Print out the details of the QuantLib curve."""
 

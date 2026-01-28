@@ -1,11 +1,15 @@
-##############################################################################
-# Copyright (C) 2018, 2019, 2020 Dominic O'Kane
-##############################################################################
+from abc import ABC, abstractmethod
 
-
-from ...models.black_scholes import BlackScholes
-from ...utils.global_vars import g_days_in_year
+from ...utils.calendar import Calendar, CalendarTypes
 from ...utils.date import Date
+from ...utils.day_count import DayCountTypes
+from ...utils.error import FinError
+from ...utils.fx_helper import get_fx_pair_base_size
+
+from ...market.curves import DiscountCurve
+
+from .fx_forward_curve import FXForwardCurve
+from .fx_vol_surface import FXVolSurface
 
 ##########################################################################
 
@@ -14,163 +18,212 @@ bump = 1e-4
 ##########################################################################
 
 
-class FXOption:
+class FXOption(ABC):
     """Class that is used to perform perturbation risk for FX options."""
 
+    def __init__(
+        self,
+        currency_pair: str,
+        cal_type: CalendarTypes
+    ):
+        self.currency_pair = currency_pair
+        self.for_name = self.currency_pair[0:3]
+        self.dom_name = self.currency_pair[3:6]
+        self.cal_type = cal_type
+        self.calendar = Calendar(cal_type)
+
+        self.base_size = get_fx_pair_base_size(self.currency_pair)
+
+    ###########################################################################
+
+    @abstractmethod
     def value(
         self,
         value_dt: Date,
-        spot_fx_rate: float,
-        domestic_curve,
-        foreign_curve,
-        model,
+        forward_curve: FXForwardCurve,
+        domestic_curve: DiscountCurve,
+        vol_surface: FXVolSurface,
+        dc_type: DayCountTypes
     ):
-
-        print("You should not be here!")
-        return 0.0
+        raise NotImplementedError("Should implememnt `value` method")
 
     ###########################################################################
 
     def delta(
-        self, value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+        self, value_dt, forward_curve, domestic_curve, vol_surface, dc_type, bump=1
     ):
         """Calculate the option delta (FX rate sensitivity) by adding on a
         small bump and calculating the change in the option price."""
 
-        v = self.value(
-            value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+        forward_curve_up = forward_curve.bump_spot(bump / self.base_size)
+        forward_curve_down = forward_curve.bump_spot(-bump / self.base_size)
+
+        v_up = self.value(
+            value_dt, forward_curve_up, domestic_curve, vol_surface, dc_type
         )
 
-        v_bumped = self.value(
-            value_dt, spot_fx_rate + bump, domestic_curve, foreign_curve, model
+        v_down = self.value(
+            value_dt, forward_curve_down, domestic_curve, vol_surface, dc_type
         )
 
-        if isinstance(v_bumped, dict):
-            delta = (v_bumped["value"] - v["value"]) / bump
+        if isinstance(v_up, dict):
+            delta = (v_up["value"] - v_down["value"]) / (2 * bump / self.base_size)
         else:
-            delta = (v_bumped - v) / bump
+            delta = (v_up - v_down) / (2 * bump / self.base_size)
 
         return delta
 
     ###########################################################################
 
     def gamma(
-        self, value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+        self, value_dt, forward_curve, domestic_curve, vol_surface, dc_type, bump=1
     ):
         """Calculate the option gamma (delta sensitivity) by adding on a
         small bump and calculating the change in the option delta."""
 
-        v = self.delta(
-            value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+        forward_curve_up = forward_curve.bump_spot(bump / self.base_size)
+        forward_curve_down = forward_curve.bump_spot(-bump / self.base_size)
+
+        v = self.value(
+            value_dt, forward_curve, domestic_curve, vol_surface, dc_type
         )
 
-        v_bumped_dn = self.delta(
-            value_dt, spot_fx_rate + bump, domestic_curve, foreign_curve, model
+        v_down = self.value(
+            value_dt, forward_curve_down, domestic_curve, vol_surface, dc_type
         )
 
-        v_bumped_up = self.delta(
-            value_dt, spot_fx_rate + bump, domestic_curve, foreign_curve, model
+        v_up = self.value(
+            value_dt, forward_curve_up, domestic_curve, vol_surface, dc_type
         )
 
         if isinstance(v, dict):
             num = (
-                v_bumped_up["value"] - 2.0 * v["value"] + v_bumped_dn["value"]
+                v_up["value"] - 2.0 * v["value"] + v_down["value"]
             )
-            gamma = num / bump / 2.0
+            gamma = num / ((bump / self.base_size) ** 2.0)
         else:
-            gamma = (v_bumped_up - 2.0 * v + v_bumped_dn) / bump / 2.0
+            gamma = (v_up - 2.0 * v + v_down) / ((bump / self.base_size) ** 2.0)
 
         return gamma
 
     ###########################################################################
 
     def vega(
-        self, value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+        self, value_dt, forward_curve, domestic_curve, vol_surface, dc_type, bump=1
     ):
         """Calculate the option vega (volatility sensitivity) by adding on a
         small bump and calculating the change in the option price."""
 
-        bump = 0.01
+        surface_up = vol_surface.bump_volatility(bump / 100)
+        surface_down = vol_surface.bump_volatility(-bump / 100)
 
-        v = self.value(
-            value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+        v_up = self.value(
+            value_dt, forward_curve, domestic_curve, surface_up, dc_type
         )
 
-        vp = self.value(
-            value_dt,
-            spot_fx_rate,
-            domestic_curve,
-            foreign_curve,
-            BlackScholes(model.volatility + bump),
+        v_down = self.value(
+            value_dt, forward_curve, domestic_curve, surface_down, dc_type
         )
 
-        if isinstance(v, dict):
-            vega = vp["value"] - v["value"]  # / bump
+        if isinstance(v_up, dict):
+            vega = (v_up["value"] - v_down["value"])  / (2.0 * bump)
         else:
-            vega = vp - v  # / bump
+            vega = (v_up - v_down) / (2.0 * bump)
 
         return vega
 
     ###########################################################################
 
     def theta(
-        self, value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+        self, value_dt, forward_curve, domestic_curve, vol_surface, dc_type, bump=1
     ):
         """Calculate the option theta (calendar time sensitivity) by moving
         forward one day and calculating the change in the option price."""
 
         v = self.value(
-            value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+            value_dt, forward_curve, domestic_curve, vol_surface, dc_type
         )
 
-        next_dt = value_dt.add_days(1)
-
-        domestic_curve.value_dt = next_dt
-        foreign_curve.value_dt = next_dt
+        next_dt = self.calendar.add_business_days(value_dt, bump)
 
         v_bumped = self.value(
-            next_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+            next_dt, forward_curve, domestic_curve, vol_surface, dc_type
         )
-
-        bump = 1.0 / g_days_in_year
 
         if isinstance(v, dict):
             theta = (v_bumped["value"] - v["value"]) / bump
         else:
             theta = (v_bumped - v) / bump
 
-        # Don't forget to reset the value dates
-        domestic_curve.value_dt = value_dt
-        foreign_curve.value_dt = value_dt
-
         return theta
 
     ###########################################################################
 
     def rho(
-        self, value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+        self, value_dt, forward_curve, domestic_curve, vol_surface, dc_type, bump=1, bump_type="pillar"
     ):
-        """Calculate the option rho (interest rate sensitivity) by perturbing
+        """Calculate the option rho (domestic interest rate sensitivity) by perturbing
         the discount curve and revaluing."""
 
-        v = self.value(
-            value_dt, spot_fx_rate, domestic_curve, foreign_curve, model
+        if bump_type == "pillar":
+            domestic_curve_up = domestic_curve.bump_curve(bump / 10000)
+            domestic_curve_down = domestic_curve.bump_curve(-bump / 10000)
+            forward_curve_up = forward_curve.bump_parallel(bump / 10000)
+            forward_curve_down = forward_curve.bump_parallel(-bump / 10000)
+        elif bump_type == "market":
+            domestic_curve_up = domestic_curve.bump_parallel(bump / 10000)
+            domestic_curve_down = domestic_curve.bump_parallel(-bump / 10000)
+            forward_curve_up = forward_curve.bump_domestic_curve(domestic_curve, domestic_curve_up)
+            forward_curve_down = forward_curve.bump_domestic_curve(domestic_curve, domestic_curve_down)
+        else:
+            raise FinError(f"Unsupported bump type: {bump_type}")
+
+        v_up = self.value(
+            value_dt, forward_curve_up, domestic_curve_up, vol_surface, dc_type
         )
-        v_bumped = self.value(
-            value_dt,
-            spot_fx_rate,
-            domestic_curve.bump(bump),
-            foreign_curve,
-            model,
+        v_down = self.value(
+            value_dt, forward_curve_down, domestic_curve_down, vol_surface, dc_type
         )
 
-        if isinstance(v, dict):
-            rho = (v_bumped["value"] - v["value"]) / bump
+        if isinstance(v_up, dict):
+            rho = (v_up["value"] - v_down["value"]) / (2.0 * bump)
         else:
-            rho = (v_bumped - v) / bump
+            rho = (v_up - v_down) / (2.0 * bump)
+
+        return rho
+
+    ###########################################################################
+
+    def phi(
+        self, value_dt, forward_curve, domestic_curve, vol_surface, dc_type, bump=1, bump_type="pillar"
+    ):
+        """Calculate the option phi (foreign interest rate sensitivity) by perturbing
+        the discount curve and revaluing."""
+
+        if bump_type == "pillar":
+            forward_curve_up = forward_curve.bump_parallel(bump / 10000)
+            forward_curve_down = forward_curve.bump_parallel(-bump / 10000)
+        elif bump_type == "market":
+            domestic_curve_up = domestic_curve.bump_parallel(bump / 10000)
+            domestic_curve_down = domestic_curve.bump_parallel(-bump / 10000)
+            forward_curve_up = forward_curve.bump_domestic_curve(domestic_curve, domestic_curve_up)
+            forward_curve_down = forward_curve.bump_domestic_curve(domestic_curve, domestic_curve_down)
+        else:
+            raise FinError(f"Unsupported bump type: {bump_type}")
+
+        v_up = self.value(
+            value_dt, forward_curve_up, domestic_curve, vol_surface, dc_type
+        )
+        v_down = self.value(
+            value_dt, forward_curve_down, domestic_curve, vol_surface, dc_type
+        )
+
+        if isinstance(v_up, dict):
+            rho = (v_up["value"] - v_down["value"]) / (2.0 * bump)
+        else:
+            rho = (v_up - v_down) / (2.0 * bump)
 
         return rho
 
 
-##########################################################################
 ##########################################################################
