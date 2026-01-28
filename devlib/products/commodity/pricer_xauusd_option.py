@@ -16,12 +16,13 @@ sys.path.append(parent_folder_path)
 import QuantLib as ql
 import pandas as pd
 import numpy as np
-from market.curves.pm_curves import PmForwardCurve
-from products.fx import fx_vanilla, fx_digital, fx_range_accrual, fx_knock
-from market.volatility.fx_vol_surface import FxVolSurfaceHK
-from market.curves.fx_curves import FxImpliedAssetCurve
-from market.curves.overnight_index_curves import Sofr
-from utils.fx_utils import get_calendar
+from devlib.market.curves.pm_curves import PmForwardCurve
+from devlib.products.fx import fx_vanilla, fx_digital, fx_range_accrual, fx_knock
+from devlib.market.volatility.fx_vol_surface import FxVolSurfaceHK
+from devlib.market.volatility.constant_vol_surface import ConstantVolSurface
+from devlib.market.curves.fx_curves import FxImpliedAssetCurve
+from devlib.market.curves.overnight_index_curves import Sofr
+from devlib.utils.fx_utils import get_calendar
 
 def valuation(inst, today, forward_curve, d_curve, vol_surface, daycount=ql.Actual365Fixed()):
     npv = inst.npv(today, forward_curve, d_curve, vol_surface, daycount)
@@ -51,7 +52,7 @@ ql.Settings.instance().evaluationDate = today
 # pm forward_curve
 d_ccy = 'USD'
 f_ccy = 'XAU'
-mkt_file_path = parent_folder_path + '/products/commodity/market_data/market_data_fivs_20250811.xlsx'
+mkt_file_path = parent_folder_path + '/unit_test/data/market_data_fivs_20250811.xlsx'
 pm_fwd_data = pd.read_excel(mkt_file_path, sheet_name='precious metal')
 pm_fwd_data = pm_fwd_data.loc[pm_fwd_data['TYPE'] == f_ccy+d_ccy, ['TENOR', 'SETTLE_DT', 'PX_LAST']]
 pm_fwd_data.columns = ['Tenor', 'SettleDate', 'Rate']
@@ -61,7 +62,7 @@ calendar = get_calendar(f_ccy, d_ccy, is_with_usd=True)
 fx_fwd_crv = PmForwardCurve(today, spot, pm_fwd_data, f_ccy, d_ccy, calendar=calendar, daycount=ql.Actual365Fixed(), data_type='rate')
 
 # d_curve
-mkt_file = parent_folder_path + "/products/commodity/market_data/sofr_curve_data_20250811.xlsx"
+mkt_file = parent_folder_path + "/unit_test/data/sofr_curve_data_20250811.xlsx"
 swap_mkt_data = pd.read_excel(mkt_file, sheet_name="swap")
 fixing_data = pd.read_excel(mkt_file, sheet_name="fixing")
 d_crv = Sofr(today, swap_mkt_data=swap_mkt_data, fixing_data=fixing_data)
@@ -71,7 +72,7 @@ calendar = get_calendar(f_ccy, d_ccy, is_with_usd=True)
 f_crv = FxImpliedAssetCurve(today, d_crv, fx_fwd_crv, calendar, ql.Actual365Fixed())
 
 # vol_surface
-vol_file = parent_folder_path + r"\market\volatility\market_data\XAUUSD_voldata_20250811.xlsx"
+vol_file = parent_folder_path + r"\unit_test\data\XAUUSD_voldata_20250811.xlsx"
 vol_data = pd.read_excel(vol_file, sheet_name="vol_data")
 calendar = get_calendar(f_ccy, d_ccy, is_with_usd=True)
 vol_surface = FxVolSurfaceHK(today, vol_data, spot, d_ccy, f_ccy,
@@ -139,9 +140,9 @@ calendar = get_calendar(f_ccy, d_ccy, is_with_usd=True)
 expiry = ql.Date(13,11,2025)
 payment_date = calendar.advance(expiry, ql.Period(2, ql.Days))
 barrier_type = 'upout'
-barrier = 3400
+barrier = 3100
 barrier_at_coupon = True #到期时若价格等于barrier，属于coupon情形则为True，属于option情形则为False
-flavor = 'call'
+flavor = 'put'
 strike = 3200
 notional = 1e6
 notional_ccy = 'USD'
@@ -150,12 +151,15 @@ trade_direction = 'long'
 inst = fx_knock.FxKnock(d_ccy, f_ccy, calendar, expiry, payment_date,
                         barrier_type, barrier, barrier_at_coupon, flavor, strike,
                         notional, notional_ccy, trade_direction)
+vol_surface = ConstantVolSurface(today, 0.15)
+print('\nPricer example (knock in/out):')
+valuation(inst, today, fx_fwd_crv, d_crv, vol_surface, daycount=ql.Actual365Fixed())
 
 # Range Accrual Note -> range accrual option
 d_ccy = 'USD'
 f_ccy = 'XAU'
 calendar = get_calendar(f_ccy, d_ccy, is_with_usd=True)
-start_date = ql.Date(12,8,2025)
+start_date = ql.Date(10,11,2025)
 end_date = ql.Date(13,11,2025)
 obs_end_date = end_date
 obs_freq = ql.Period('1D')
@@ -178,12 +182,12 @@ range_out_coupon_rate = 0
 range_in_coupon = range_in_coupon_rate * notional
 range_out_coupon = range_out_coupon_rate * notional
 
-fx_fixing = pd.Series()
+fx_fixing = pd.Series([spot], index=[today])
 
 inst = fx_range_accrual.FxRangeAccrual(d_ccy, f_ccy, calendar, obs_schedule, payment_date,
                                        range_down, down_in, range_up, up_in,
                                        range_in_coupon, range_out_coupon, cash_ccy, trade_direction, fx_fixing, cash_settle)
-
+vol_surface = ConstantVolSurface(today, 0.15)
 print('\nPricer example (range accrual):')
 valuation(inst, today, fx_fwd_crv, d_crv, vol_surface, daycount=ql.Actual365Fixed())
 

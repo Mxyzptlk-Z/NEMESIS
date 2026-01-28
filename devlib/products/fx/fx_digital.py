@@ -2,11 +2,11 @@ import numpy as np
 import pandas as pd
 import QuantLib as ql
 
-from products.fx.fx_base_option import FxBaseOption
-from models.bsm.black76 import cash_or_nothing_76, asset_or_nothing_76
+from ...products.fx.fx_base_option import FxBaseOption
+from ...models.bsm.black76 import cash_or_nothing_76, asset_or_nothing_76
 
-from utils.utils import average_sigma
-from utils.fx_utils import get_pair_tweak_param
+from ...utils.utils import average_sigma
+from ...utils.fx_utils import get_pair_tweak_param
 
 
 

@@ -2,10 +2,10 @@ import numpy as np
 import pandas as pd
 import QuantLib as ql
 
-from products.fx.fx_digital import FxBinary
-from products.fx.fx_base_option import FxBaseOption
+from ...products.fx.fx_digital import FxBinary
+from ...products.fx.fx_base_option import FxBaseOption
 
-from utils.utils import average_sigma
+from ...utils.utils import average_sigma
 
 
 class FxRangeDigital(FxBaseOption):

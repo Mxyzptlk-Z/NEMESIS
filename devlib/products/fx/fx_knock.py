@@ -8,9 +8,9 @@ Created on Tue Jun  4 16:38:40 2024
 
 import QuantLib as ql
 
-from products.fx.fx_base_option import FxBaseOption
-from products.fx.fx_vanilla import FxVanilla
-from products.fx.fx_digital import FxBinary
+from ...products.fx.fx_base_option import FxBaseOption
+from ...products.fx.fx_vanilla import FxVanilla
+from ...products.fx.fx_digital import FxBinary
 
 
 class FxKnock(FxBaseOption):
