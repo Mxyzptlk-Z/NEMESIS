@@ -8,10 +8,10 @@ from ...utils.global_types import OptionTypes
 from ...utils.helpers import check_argument_types, label_to_string
 from ...models.black_analytic import black_value
 from ...market.curves.discount_curve import DiscountCurve
+from ...market.curves.forward_curve import ForwardCurve
+from ...market.volatility.vol_surface import VolSurface
 
 from .fx_option import FXOption
-from .fx_forward_curve import FXForwardCurve
-from .fx_vol_surface import FXVolSurface
 
 
 ###############################################################################
@@ -97,9 +97,9 @@ class FXVanillaOption(FXOption):
     def value(
         self,
         value_dt: Date,
-        forward_curve: FXForwardCurve,
+        forward_curve: ForwardCurve,
         domestic_curve: DiscountCurve,
-        vol_surface: FXVolSurface,
+        vol_surface: VolSurface,
         dc_type: DayCountTypes
     ):
         """This function calculates the value of the option using a specified
@@ -157,7 +157,7 @@ class FXVanillaOption(FXOption):
             raise FinError("Invalid notional currency.")
 
         vdf = vdf
-        spot_fx_rate = forward_curve.spot_fx_rate
+        spot_fx_rate = forward_curve.spot_rate
 
         pips_dom = vdf
         pips_for = vdf / (spot_fx_rate * self.strike_fx_rate)

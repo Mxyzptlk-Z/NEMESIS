@@ -4,13 +4,13 @@ import numpy as np
 
 from ...market.curves.discount_curve import DiscountCurve
 from ...market.curves.interpolator import Interpolator, InterpTypes
+from ...market.curves.forward_curve import ForwardCurve
 from ...utils.calendar import CalendarTypes
 from ...utils.date import Date
 from ...utils.day_count import DayCount, DayCountTypes
 from ...utils.error import FinError
 from ...utils.fx_helper import get_fx_pair_base_size
 from ...utils.global_vars import g_days_in_year
-from .fx_forward_curve import FXForwardCurve
 
 ###############################################################################
 
@@ -92,7 +92,7 @@ class FXImpliedAssetCurve(DiscountCurve):
         self,
         value_dt: Date,
         base_curve: DiscountCurve,
-        forward_curve: FXForwardCurve,
+        forward_curve: ForwardCurve,
         cal_type: CalendarTypes,
         dc_type: DayCountTypes,
         interp_type: InterpTypes,

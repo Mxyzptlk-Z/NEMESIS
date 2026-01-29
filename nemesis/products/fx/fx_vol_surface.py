@@ -6,11 +6,12 @@ from scipy.interpolate import interp1d
 from scipy.stats import norm
 
 from ...market.curves.discount_curve import DiscountCurve
-from ...utils.calendar import BusDayAdjustTypes, Calendar, CalendarTypes
+from ...market.curves.forward_curve import ForwardCurve
+from ...market.volatility.vol_surface import VolSurface
+from ...utils.calendar import BusDayAdjustTypes, CalendarTypes
 from ...utils.date import Date
-from ...utils.day_count import DayCount, DayCountTypes
+from ...utils.day_count import DayCountTypes
 from ...utils.error import FinError
-from .fx_forward_curve import FXForwardCurve
 
 
 ##########################################################################
@@ -162,7 +163,7 @@ class SigmaSolver:
 ###############################################################################
 
 
-class FXVolSurface:
+class FXVolSurface(VolSurface):
     """
     FX Volatility Surface using delta-space interpolation.
 
@@ -183,7 +184,7 @@ class FXVolSurface:
         vol_data: pd.DataFrame,
         spot_fx_rate: float,
         currency_pair: str,
-        forward_curve: FXForwardCurve,
+        forward_curve: ForwardCurve,
         foreign_curve: DiscountCurve,
         cal_type: CalendarTypes = CalendarTypes.NONE,
         dc_type: DayCountTypes = DayCountTypes.ACT_365F,
@@ -202,7 +203,7 @@ class FXVolSurface:
             Spot FX rate
         currency_pair : str
             Currency pair code, in f_ccy / d_ccy
-        fx_forward_curve : FXForwardCurve
+        fx_forward_curve : ForwardCurve
             FX forward curve for forward rate calculation
         foreign_curve : DiscountCurve
             Foreign currency discount curve
@@ -211,20 +212,16 @@ class FXVolSurface:
         dc_type : DayCountTypes
             Day count type for time fraction calculation
         """
-        self.value_dt = value_dt
+        super().__init__(value_dt, cal_type, dc_type)
+
         self.vol_data_rr_bf = vol_data.copy()
         self.spot_fx_rate = spot_fx_rate
         self.currency_pair = currency_pair
         self.forward_curve = forward_curve
         self.foreign_curve = foreign_curve
-        self.cal_type = cal_type
-        self.dc_type = dc_type
 
         self.for_name = self.currency_pair[0:3]
         self.dom_name = self.currency_pair[3:6]
-
-        self._calendar = Calendar(cal_type)
-        self._day_count = DayCount(dc_type)
 
         # Convert volatility from percentage to decimal
         self.vol_data_rr_bf["Volatility"] = self.vol_data_rr_bf["Volatility"] / 100.0

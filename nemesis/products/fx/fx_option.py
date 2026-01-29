@@ -6,10 +6,8 @@ from ...utils.day_count import DayCountTypes
 from ...utils.error import FinError
 from ...utils.fx_helper import get_fx_pair_base_size
 
-from ...market.curves import DiscountCurve
-
-from .fx_forward_curve import FXForwardCurve
-from .fx_vol_surface import FXVolSurface
+from ...market.curves import DiscountCurve, ForwardCurve
+from ...market.volatility import VolSurface
 
 ##########################################################################
 
@@ -40,9 +38,9 @@ class FXOption(ABC):
     def value(
         self,
         value_dt: Date,
-        forward_curve: FXForwardCurve,
+        forward_curve: ForwardCurve,
         domestic_curve: DiscountCurve,
-        vol_surface: FXVolSurface,
+        vol_surface: VolSurface,
         dc_type: DayCountTypes
     ):
         raise NotImplementedError("Should implememnt `value` method")

@@ -3,10 +3,12 @@ import numpy as np
 import pandas as pd
 
 from ...market.curves.discount_curve import DiscountCurve
+from ...market.curves.forward_curve import ForwardCurve
 from ...market.curves.interpolator import Interpolator, InterpTypes
 from ...utils.calendar import CalendarTypes
 from ...utils.date import Date
 from ...utils.day_count import DayCount, DayCountTypes
+from ...utils.error import FinError
 from ...utils.fx_helper import get_fx_pair_base_size
 from ...utils.global_vars import g_days_in_year
 
@@ -15,7 +17,7 @@ T1_SETTLE_FX_PAIRS = ["USDCAD", "CADUSD", "USDPHP", "PHPUSD", "USDMNT", "MNTUSD"
 ###############################################################################
 
 
-class FXForwardCurve(DiscountCurve):
+class FXForwardCurve(ForwardCurve):
     """
     """
 
@@ -32,36 +34,32 @@ class FXForwardCurve(DiscountCurve):
         interp_type: InterpTypes
     ):
         """"""
-        self.value_dt = value_dt
-        self.spot_fx_rate = spot_fx_rate
-        self.fx_fwd_data = fx_fwd_data.copy()
-        self.currency_pair = currency_pair
+        super().__init__(
+            value_dt, spot_fx_rate, fx_fwd_data, cal_type, dc_type, interp_type
+        )
 
+        self.currency_pair = currency_pair
         self.for_name = self.currency_pair[0:3]
         self.dom_name = self.currency_pair[3:6]
 
-        self.cal_type = cal_type
-        self.dc_type = dc_type
-
-        self._interp_type = interp_type
-        self._interpolator = None
-
         self._build_curve()
+
+    ###############################################################################
 
     def _build_curve(self):
         """"""
-        format_date = [Date.from_string(dt, format_string="%Y-%m-%d") for dt in self.fx_fwd_data["SettleDate"]]
-        self.fx_fwd_data["SettleDate"] = format_date
+        format_date = [Date.from_string(dt, format_string="%Y-%m-%d") for dt in self.fwd_data["SettleDate"]]
+        self.fwd_data["SettleDate"] = format_date
 
         try:
-            on = self.fx_fwd_data[self.fx_fwd_data["Tenor"]=="ON"].to_dict(orient="records")[0]
+            on = self.fwd_data[self.fwd_data["Tenor"]=="ON"].to_dict(orient="records")[0]
             on_spread = on.get("Spread")
             on_settle_dt = on.get("SettleDate")
         except:
-            raise Exception('Missing ON spread data!')
+            raise FinError("ON spread data missing")
 
         try:
-            tn = self.fx_fwd_data[self.fx_fwd_data["Tenor"]=="TN"].to_dict(orient="records")[0]
+            tn = self.fwd_data[self.fwd_data["Tenor"]=="TN"].to_dict(orient="records")[0]
             tn_spread = tn.get("Spread")
             tn_settle_dt = tn.get("SettleDate")
         except:
@@ -70,7 +68,7 @@ class FXForwardCurve(DiscountCurve):
             exist_tn = True
 
         try:
-            spot = self.fx_fwd_data[self.fx_fwd_data["Tenor"]=="SPOT"].to_dict(orient="records")[0]
+            spot = self.fwd_data[self.fwd_data["Tenor"]=="SPOT"].to_dict(orient="records")[0]
             self.spot_dt = spot.get("SettleDate")
         except:
             if self.currency_pair in T1_SETTLE_FX_PAIRS:
@@ -80,7 +78,7 @@ class FXForwardCurve(DiscountCurve):
 
         fwd_point_base = get_fx_pair_base_size(self.currency_pair)
 
-        fx_fwd_data_after_spot = self.fx_fwd_data[self.fx_fwd_data["SettleDate"] > self.spot_dt].copy()
+        fx_fwd_data_after_spot = self.fwd_data[self.fwd_data["SettleDate"] > self.spot_dt].copy()
         fx_fwd_data_after_spot = fx_fwd_data_after_spot.drop_duplicates(subset=["SettleDate"], keep="last")
         fx_fwd_points = fx_fwd_data_after_spot["Spread"].tolist()
         fx_fwd_dts = fx_fwd_data_after_spot["SettleDate"].tolist()
@@ -97,7 +95,7 @@ class FXForwardCurve(DiscountCurve):
                 fx_fwd_points = [-on_spread, 0.0] + fx_fwd_points
                 fx_fwd_dts = [self.value_dt, self.spot_dt] + fx_fwd_dts
 
-        self.fx_fwds = [self.spot_fx_rate + s / fwd_point_base for s in fx_fwd_points]
+        self.fx_fwds = [self.spot_rate + s / fwd_point_base for s in fx_fwd_points]
         self.fx_fwd_dts = fx_fwd_dts
 
         day_count = DayCount(self.dc_type)
@@ -124,8 +122,8 @@ class FXForwardCurve(DiscountCurve):
 
     def bump_spot(self, bump):
         bumped_curve = copy.deepcopy(self)
-        bumped_curve.spot_today = self.spot_today * (self.spot_fx_rate + bump) / self.spot_fx_rate
-        bumped_curve.spot_fx_rate = self.spot_fx_rate + bump
+        bumped_curve.spot_today = self.spot_today * (self.spot_rate + bump) / self.spot_rate
+        bumped_curve.spot_rate = self.spot_rate + bump
         return bumped_curve
 
     ###############################################################################
@@ -134,7 +132,7 @@ class FXForwardCurve(DiscountCurve):
     def bump_parallel(self, bump):
         bumped_curve = copy.deepcopy(self)
         bumped_curve._dfs *= np.exp(-bump * bumped_curve._times)
-        bumped_curve.spot_fx_rate = bumped_curve.get_forward(self.spot_dt, self.dc_type)
+        bumped_curve.spot_rate = bumped_curve.get_forward(self.spot_dt, self.dc_type)
         return bumped_curve
 
     ###############################################################################
