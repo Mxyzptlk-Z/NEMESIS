@@ -28,8 +28,8 @@ class ConstantVolSurface(VolSurface):
         pass
 
 
-    def _interp_vol(self, expiry_dt: Date, strike: float) -> float:
-        return self.sigma
+    def interp_vol(self, expiry_dt: Date, strike: float) -> float:
+        return self.sigma + self._vol_bump
 
 
     def bump_volatility(self, bump, inplace=False):

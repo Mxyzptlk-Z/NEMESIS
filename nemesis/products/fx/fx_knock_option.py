@@ -1,8 +1,3 @@
-###############################################################################
-# FX Knock-In/Knock-Out Options
-# Implements barrier options using static replication
-###############################################################################
-
 import numpy as np
 
 from ...utils.calendar import Calendar, CalendarTypes
@@ -37,17 +32,17 @@ class BarrierTypes:
 class FXKnockOption(FXOption):
     """
     FX Knock-In/Knock-Out Option (European Barrier Option at Expiry).
-    
-    This implements European-style barrier options that are observed only
-    at expiry. The option uses static replication with vanilla and binary
+
+    Implements European-style barrier options that are observed only at
+    expiry. The option uses static replication with vanilla and binary
     options.
-    
+
     Barrier Types:
     - UP_OUT: Option knocked out if spot >= barrier at expiry (Call)
     - DOWN_OUT: Option knocked out if spot <= barrier at expiry (Put)
-    - UP_IN: Option knocked in if spot >= barrier at expiry (Put)  
+    - UP_IN: Option knocked in if spot >= barrier at expiry (Put)
     - DOWN_IN: Option knocked in if spot <= barrier at expiry (Call)
-    
+
     Note: This is for European barriers observed at expiry only, not
     continuous monitoring barriers.
     """
@@ -104,14 +99,10 @@ class FXKnockOption(FXOption):
 
         super().__init__(currency_pair, cal_type)
 
-        calendar = Calendar(cal_type)
-        payment_dt = calendar.add_business_days(expiry_dt, spot_days)
+        payment_dt = self.calendar.add_business_days(expiry_dt, spot_days)
 
         if payment_dt < expiry_dt:
             raise FinError("Payment date must be on or after expiry date.")
-
-        if len(currency_pair) != 6:
-            raise FinError("Currency pair must be 6 characters.")
 
         if notional_currency != self.dom_name and notional_currency != self.for_name:
             raise FinError("Notional currency must be in currency pair.")
@@ -119,7 +110,7 @@ class FXKnockOption(FXOption):
         barrier_type = barrier_type.lower()
         option_flavor = option_flavor.lower()
 
-        if barrier_type not in [BarrierTypes.UP_OUT, BarrierTypes.UP_IN, 
+        if barrier_type not in [BarrierTypes.UP_OUT, BarrierTypes.UP_IN,
                                  BarrierTypes.DOWN_OUT, BarrierTypes.DOWN_IN]:
             raise FinError(f"Invalid barrier type: {barrier_type}")
 
@@ -167,7 +158,7 @@ class FXKnockOption(FXOption):
             barrier_type_equal = BarrierTypes.UP_OUT
             if coupon != 0:
                 self.digital_coupon = FXBinaryOption(
-                    expiry_dt, barrier_fx_rate, currency_pair, 
+                    expiry_dt, barrier_fx_rate, currency_pair,
                     OptionTypes.BINARY_CALL, coupon, self.dom_name,
                     barrier_at_coupon, cal_type, spot_days, coupon_cash_settle
                 )
@@ -186,28 +177,28 @@ class FXKnockOption(FXOption):
         # Option type 0: barrier_type_equal opposite to option_flavor direction
         # (upout put, upin call, etc) -> replicate with vanilla_barrier + digital_diff
 
-        if ((barrier_type_equal == BarrierTypes.UP_OUT and option_flavor == 'call') or 
+        if ((barrier_type_equal == BarrierTypes.UP_OUT and option_flavor == 'call') or
             (barrier_type_equal == BarrierTypes.UP_IN and option_flavor == 'put')):
             self.option_type_flag = 1
-            
+
             # Digital for the barrier-strike difference
             if option_flavor == 'call':
                 digital_type = OptionTypes.BINARY_CALL
             else:
                 digital_type = OptionTypes.BINARY_PUT
-                
+
             self.digital_diff = FXBinaryOption(
                 expiry_dt, barrier_fx_rate, currency_pair, digital_type,
-                diff * notional_for, self.dom_name, barrier_at_coupon, 
+                diff * notional_for, self.dom_name, barrier_at_coupon,
                 cal_type, spot_days, True
             )
-            
+
             # Vanilla at barrier
             self.vanilla_barrier = FXVanillaOption(
                 expiry_dt, barrier_fx_rate, currency_pair, option_type,
                 notional_for, self.for_name, cal_type, spot_days
             )
-            
+
             # Vanilla at strike
             self.vanilla_strike = FXVanillaOption(
                 expiry_dt, strike_fx_rate, currency_pair, option_type,
@@ -215,19 +206,19 @@ class FXKnockOption(FXOption):
             )
         else:
             self.option_type_flag = 0
-            
+
             # Digital for the barrier-strike difference
             if option_flavor == 'call':
                 digital_type = OptionTypes.BINARY_CALL
             else:
                 digital_type = OptionTypes.BINARY_PUT
-                
+
             self.digital_diff = FXBinaryOption(
                 expiry_dt, barrier_fx_rate, currency_pair, digital_type,
                 diff * notional_for, self.dom_name, (not barrier_at_coupon),
                 cal_type, spot_days, True
             )
-            
+
             # Vanilla at barrier
             self.vanilla_barrier = FXVanillaOption(
                 expiry_dt, barrier_fx_rate, currency_pair, option_type,

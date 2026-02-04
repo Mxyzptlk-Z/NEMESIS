@@ -1,8 +1,3 @@
-###############################################################################
-# FX Range Digital and Range Accrual Options
-# Implements range binary options and range accrual products
-###############################################################################
-
 import numpy as np
 import pandas as pd
 
