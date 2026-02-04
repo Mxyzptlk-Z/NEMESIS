@@ -33,6 +33,9 @@ class VolSurface:
         self._calendar = Calendar(cal_type)
         self._day_count = DayCount(dc_type)
 
+        # Store bump value for surface bump
+        self._vol_bump = 0.0
+
     ###########################################################################
 
     @abstractmethod

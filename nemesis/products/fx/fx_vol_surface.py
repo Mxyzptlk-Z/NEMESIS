@@ -229,9 +229,6 @@ class FXVolSurface(VolSurface):
         # Transform RR/BF data to Call/Put volatilities
         self.vol_data = self._build_vol_data()
 
-        # Store bump value for surface bump
-        self._vol_bump = 0.0
-
     ###########################################################################
 
     def _build_vol_data(self) -> pd.DataFrame:
