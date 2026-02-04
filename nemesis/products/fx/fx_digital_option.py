@@ -1,18 +1,16 @@
 import numpy as np
 
+from ...market.curves.discount_curve import DiscountCurve
+from ...market.curves.forward_curve import ForwardCurve
+from ...market.volatility.vol_surface import VolSurface
+from ...models.black_analytic import asset_or_nothing, cash_or_nothing
 from ...utils.calendar import Calendar, CalendarTypes
 from ...utils.date import Date
 from ...utils.day_count import DayCount, DayCountTypes
 from ...utils.error import FinError
 from ...utils.global_types import OptionTypes
 from ...utils.helpers import check_argument_types, label_to_string
-from ...models.black_analytic import cash_or_nothing, asset_or_nothing
-from ...market.curves.discount_curve import DiscountCurve
-from ...market.curves.forward_curve import ForwardCurve
-from ...market.volatility.vol_surface import VolSurface
-
 from .fx_option import FXOption
-
 
 ###############################################################################
 
@@ -37,6 +35,7 @@ class FXBinaryOption(FXOption):
         pay_on_equal: bool,  # Whether to pay when spot == strike
         cal_type: CalendarTypes,
         spot_days: int = 0,
+        payment_dt: Date | None = None,
         cash_settle: bool = True  # Cash settlement
     ):
         """
@@ -62,6 +61,8 @@ class FXBinaryOption(FXOption):
             Calendar type for business day calculations
         spot_days : int
             Settlement days after expiry
+        payment_dt : Date, optional
+            Payment date (if provided, spot_days is ignored)
         cash_settle : bool
             If True, use spot rate at expiry for FX conversion
         """
@@ -69,7 +70,8 @@ class FXBinaryOption(FXOption):
 
         super().__init__(currency_pair, cal_type)
 
-        payment_dt = self.calendar.add_business_days(expiry_dt, spot_days)
+        if payment_dt is None:
+            payment_dt = self.calendar.add_business_days(expiry_dt, spot_days)
 
         if payment_dt < expiry_dt:
             raise FinError("Payment date must be on or after expiry date.")
@@ -213,6 +215,7 @@ class FXDigitalOption(FXOption):
         cash_currency: str,
         cal_type: CalendarTypes,
         spot_days: int = 0,
+        payment_dt: Date | None = None,
         cash_settle: bool = True
     ):
         """
@@ -238,6 +241,8 @@ class FXDigitalOption(FXOption):
             Calendar type
         spot_days : int
             Settlement days
+        payment_dt : Date, optional
+            Payment date (if provided, spot_days is ignored)
         cash_settle : bool
             Cash settlement mode
         """
@@ -245,7 +250,8 @@ class FXDigitalOption(FXOption):
 
         super().__init__(currency_pair, cal_type)
 
-        payment_dt = self.calendar.add_business_days(expiry_dt, spot_days)
+        if payment_dt is None:
+            payment_dt = self.calendar.add_business_days(expiry_dt, spot_days)
 
         if payment_dt < expiry_dt:
             raise FinError("Payment date must be on or after expiry date.")
@@ -266,11 +272,11 @@ class FXDigitalOption(FXOption):
         # Create component binary options
         self.binary_left = FXBinaryOption(
             expiry_dt, strike_fx_rate, currency_pair, OptionTypes.BINARY_PUT,
-            coupon_left, cash_currency, left_in, cal_type, spot_days, cash_settle
+            coupon_left, cash_currency, left_in, cal_type, spot_days, payment_dt, cash_settle
         )
         self.binary_right = FXBinaryOption(
             expiry_dt, strike_fx_rate, currency_pair, OptionTypes.BINARY_CALL,
-            coupon_right, cash_currency, (not left_in), cal_type, spot_days, cash_settle
+            coupon_right, cash_currency, (not left_in), cal_type, spot_days, payment_dt, cash_settle
         )
 
     ###########################################################################

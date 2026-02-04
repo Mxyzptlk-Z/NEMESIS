@@ -1,18 +1,16 @@
 import numpy as np
 
+from ...market.curves.discount_curve import DiscountCurve
+from ...market.curves.forward_curve import ForwardCurve
+from ...market.volatility.vol_surface import VolSurface
+from ...models.black_analytic import black_value
 from ...utils.calendar import Calendar, CalendarTypes
 from ...utils.date import Date
 from ...utils.day_count import DayCount, DayCountTypes
 from ...utils.error import FinError
 from ...utils.global_types import OptionTypes
 from ...utils.helpers import check_argument_types, label_to_string
-from ...models.black_analytic import black_value
-from ...market.curves.discount_curve import DiscountCurve
-from ...market.curves.forward_curve import ForwardCurve
-from ...market.volatility.vol_surface import VolSurface
-
 from .fx_option import FXOption
-
 
 ###############################################################################
 # ALL CCY RATES MUST BE IN NUM UNITS OF DOMESTIC PER UNIT OF FOREIGN CURRENCY
@@ -37,7 +35,8 @@ class FXVanillaOption(FXOption):
         notional: float,
         prem_currency: str,
         cal_type: CalendarTypes,
-        spot_days: int = 0
+        spot_days: int = 0,
+        get_fwd_method: str = "forward"
     ):
         """Create the FX Vanilla Option object. Inputs include expiry date,
         strike, currency pair, option type (call or put), notional and the
@@ -84,6 +83,8 @@ class FXVanillaOption(FXOption):
         self.option_type = option_type
         self.spot_days = spot_days
 
+        self.get_fwd_method = get_fwd_method.lower()
+
     ###########################################################################
 
     def value(
@@ -122,7 +123,11 @@ class FXVanillaOption(FXOption):
         r_d = -np.log(dom_df) / t_exp
 
         k = self.strike_fx_rate
-        fwd = forward_curve.get_forward(self.delivery_dt, dc_type)
+
+        if self.get_fwd_method == "forward":
+            fwd = forward_curve.get_forward(self.delivery_dt, dc_type)
+        else:  # "spot"
+            fwd = forward_curve.get_forward_spot(self.expiry_dt, dc_type)
 
         volatility = vol_surface.interp_vol(self.expiry_dt, self.strike_fx_rate)
 

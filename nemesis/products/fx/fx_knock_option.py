@@ -1,19 +1,17 @@
 import numpy as np
 
+from ...market.curves.discount_curve import DiscountCurve
+from ...market.curves.forward_curve import ForwardCurve
+from ...market.volatility.vol_surface import VolSurface
 from ...utils.calendar import Calendar, CalendarTypes
 from ...utils.date import Date
 from ...utils.day_count import DayCount, DayCountTypes
 from ...utils.error import FinError
 from ...utils.global_types import OptionTypes
 from ...utils.helpers import check_argument_types, label_to_string
-from ...market.curves.discount_curve import DiscountCurve
-from ...market.curves.forward_curve import ForwardCurve
-from ...market.volatility.vol_surface import VolSurface
-
+from .fx_digital_option import FXBinaryOption
 from .fx_option import FXOption
 from .fx_vanilla_option import FXVanillaOption
-from .fx_digital_option import FXBinaryOption
-
 
 ###############################################################################
 
@@ -160,7 +158,8 @@ class FXKnockOption(FXOption):
                 self.digital_coupon = FXBinaryOption(
                     expiry_dt, barrier_fx_rate, currency_pair,
                     OptionTypes.BINARY_CALL, coupon, self.dom_name,
-                    barrier_at_coupon, cal_type, spot_days, coupon_cash_settle
+                    barrier_at_coupon, cal_type, spot_days,
+                    cash_settle=coupon_cash_settle
                 )
         else:  # UP_IN, DOWN_OUT
             barrier_type_equal = BarrierTypes.UP_IN
@@ -168,7 +167,8 @@ class FXKnockOption(FXOption):
                 self.digital_coupon = FXBinaryOption(
                     expiry_dt, barrier_fx_rate, currency_pair,
                     OptionTypes.BINARY_PUT, coupon, self.dom_name,
-                    barrier_at_coupon, cal_type, spot_days, coupon_cash_settle
+                    barrier_at_coupon, cal_type, spot_days,
+                    cash_settle=coupon_cash_settle
                 )
 
         # Static replication setup
@@ -190,19 +190,21 @@ class FXKnockOption(FXOption):
             self.digital_diff = FXBinaryOption(
                 expiry_dt, barrier_fx_rate, currency_pair, digital_type,
                 diff * notional_for, self.dom_name, barrier_at_coupon,
-                cal_type, spot_days, True
+                cal_type, spot_days, cash_settle=True
             )
 
             # Vanilla at barrier
             self.vanilla_barrier = FXVanillaOption(
                 expiry_dt, barrier_fx_rate, currency_pair, option_type,
-                notional_for, self.for_name, cal_type, spot_days
+                notional_for, self.for_name, cal_type, spot_days,
+                get_fwd_method='spot'
             )
 
             # Vanilla at strike
             self.vanilla_strike = FXVanillaOption(
                 expiry_dt, strike_fx_rate, currency_pair, option_type,
-                notional_for, self.for_name, cal_type, spot_days
+                notional_for, self.for_name, cal_type, spot_days,
+                get_fwd_method='spot'
             )
         else:
             self.option_type_flag = 0
@@ -216,13 +218,14 @@ class FXKnockOption(FXOption):
             self.digital_diff = FXBinaryOption(
                 expiry_dt, barrier_fx_rate, currency_pair, digital_type,
                 diff * notional_for, self.dom_name, (not barrier_at_coupon),
-                cal_type, spot_days, True
+                cal_type, spot_days, cash_settle=True
             )
 
             # Vanilla at barrier
             self.vanilla_barrier = FXVanillaOption(
                 expiry_dt, barrier_fx_rate, currency_pair, option_type,
-                notional_for, self.for_name, cal_type, spot_days
+                notional_for, self.for_name, cal_type, spot_days,
+                get_fwd_method='spot'
             )
 
     ###########################################################################
@@ -262,6 +265,8 @@ class FXKnockOption(FXOption):
         if value_dt > self.expiry_dt:
             return {"value": 0.0}
 
+        qty = self.vanilla_barrier.notional
+
         if self.option_type_flag == 1:
             # vanilla_strike - vanilla_barrier - digital_diff
             npv_strike = self.vanilla_strike.value(
@@ -273,7 +278,7 @@ class FXKnockOption(FXOption):
             npv_digital = self.digital_diff.value(
                 value_dt, forward_curve, domestic_curve, vol_surface, dc_type
             )
-            npv = npv_strike["value"] - npv_barrier["value"] - npv_digital["value"]
+            npv = (npv_strike["value"] - npv_barrier["value"]) * qty - npv_digital["value"]
         else:
             # vanilla_barrier + digital_diff
             npv_barrier = self.vanilla_barrier.value(
@@ -282,7 +287,8 @@ class FXKnockOption(FXOption):
             npv_digital = self.digital_diff.value(
                 value_dt, forward_curve, domestic_curve, vol_surface, dc_type
             )
-            npv = npv_barrier["value"] + npv_digital["value"]
+            # Vanilla value needs to be multiplied by qty
+            npv = npv_barrier["value"] * qty + npv_digital["value"]
 
         # Add rebate coupon if any
         if self.coupon != 0:

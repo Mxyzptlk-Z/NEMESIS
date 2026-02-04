@@ -41,6 +41,7 @@ class FXRangeDigitalOption(FXOption):
         cash_currency: str,
         cal_type: CalendarTypes,
         spot_days: int = 0,
+        payment_dt: Date | None = None,
         cash_settle: bool = True
     ):
         """
@@ -68,6 +69,8 @@ class FXRangeDigitalOption(FXOption):
             Calendar type
         spot_days : int
             Settlement days
+        payment_dt : Date, optional
+            Direct payment date (if provided, spot_days is ignored)
         cash_settle : bool
             Cash settlement mode
         """
@@ -79,7 +82,8 @@ class FXRangeDigitalOption(FXOption):
             raise FinError("Range up must be greater than range down")
 
         calendar = Calendar(cal_type)
-        payment_dt = calendar.add_business_days(expiry_dt, spot_days)
+        if payment_dt is None:
+            payment_dt = calendar.add_business_days(expiry_dt, spot_days)
 
         if payment_dt < expiry_dt:
             raise FinError("Payment date must be on or after expiry date.")
@@ -105,7 +109,8 @@ class FXRangeDigitalOption(FXOption):
             # Only upper barrier: pays if spot < range_up (or <= if up_in)
             dig_put = FXBinaryOption(
                 expiry_dt, range_up, currency_pair, OptionTypes.BINARY_PUT,
-                range_coupon, cash_currency, up_in, cal_type, spot_days, cash_settle
+                range_coupon, cash_currency, up_in, cal_type, spot_days,
+                payment_dt, cash_settle
             )
             self.digs = [dig_put]
 
@@ -113,7 +118,8 @@ class FXRangeDigitalOption(FXOption):
             # Only lower barrier: pays if spot > range_down (or >= if down_in)
             dig_call = FXBinaryOption(
                 expiry_dt, range_down, currency_pair, OptionTypes.BINARY_CALL,
-                range_coupon, cash_currency, down_in, cal_type, spot_days, cash_settle
+                range_coupon, cash_currency, down_in, cal_type, spot_days,
+                payment_dt, cash_settle
             )
             self.digs = [dig_call]
 
@@ -122,11 +128,13 @@ class FXRangeDigitalOption(FXOption):
             # Implemented as: long call at range_down, short call at range_up
             dig_call_1 = FXBinaryOption(
                 expiry_dt, range_down, currency_pair, OptionTypes.BINARY_CALL,
-                range_coupon, cash_currency, down_in, cal_type, spot_days, cash_settle
+                range_coupon, cash_currency, down_in, cal_type, spot_days,
+                payment_dt, cash_settle
             )
             dig_call_2 = FXBinaryOption(
                 expiry_dt, range_up, currency_pair, OptionTypes.BINARY_CALL,
-                range_coupon, cash_currency, (not up_in), cal_type, spot_days, cash_settle
+                range_coupon, cash_currency, (not up_in), cal_type, spot_days,
+                payment_dt, cash_settle
             )
             self.digs = [dig_call_1, dig_call_2]
             self._dig_signs = [1, -1]  # Long first, short second
@@ -388,7 +396,7 @@ class FXRangeAccrualOption(FXOption):
                     obs_dt, self.range_down, self.range_up,
                     self.down_in, self.up_in, 1.0,
                     self.currency_pair, self.cash_currency,
-                    self.cal_type, 0, False  # Use forward settlement for probability calc
+                    self.cal_type, 0, atm_pay_dt, False
                 )
 
                 unit_pv = unit_range_dig.value(
