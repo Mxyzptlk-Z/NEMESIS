@@ -213,10 +213,10 @@ class FXOption(ABC):
             raise FinError(f"Unsupported bump type: {bump_type}")
 
         v_up = self.value(
-            value_dt, forward_curve_up, domestic_curve, vol_surface, dc_type
+            value_dt, forward_curve_down, domestic_curve, vol_surface, dc_type
         )
         v_down = self.value(
-            value_dt, forward_curve_down, domestic_curve, vol_surface, dc_type
+            value_dt, forward_curve_up, domestic_curve, vol_surface, dc_type
         )
 
         if isinstance(v_up, dict):
