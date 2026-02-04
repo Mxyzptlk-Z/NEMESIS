@@ -114,8 +114,8 @@ class FXForwardCurve(ForwardCurve):
 
     ###############################################################################
 
-    def get_forward_spot(self, dt):
-        return self.get_forward(dt)
+    def get_forward_spot(self, dt, dc_type: DayCountTypes):
+        return self.get_forward(dt, dc_type)
 
     ###############################################################################
 

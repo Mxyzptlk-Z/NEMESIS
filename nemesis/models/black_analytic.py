@@ -87,26 +87,30 @@ def black_value(fwd, t, k, r, v, option_type):
         raise FinError("Option type must be a European Call or Put")
 
 
-# def cash_or_nothing(cash, fwd, t, k, r, v, option_type):
-#     """Price a binary cash-or-nothing option using Black model."""
-#     _, d2 = calculate_d1_d2(fwd, t, k, v)
-#     if option_type == OptionTypes.BINARY_CALL:
-#         return cash * np.exp(-r*t) * n_vect(d2)
-#     elif option_type == OptionTypes.BINARY_PUT:
-#         return cash * np.exp(-r*t) * n_vect(-d2)
-#     else:
-#         raise FinError("Option type must be a Binary Call or Put")
+def cash_or_nothing(cash, fwd, t, k, r, v, option_type):
+    """Price a binary cash-or-nothing option using Black model."""
+    _, d2 = calculate_d1_d2(fwd, t, k, v)
+    if option_type == OptionTypes.BINARY_CALL:
+        # return cash * np.exp(-r*t) * n_vect(d2)
+        return cash * np.exp(-r*t) * norm.cdf(d2)
+    elif option_type == OptionTypes.BINARY_PUT:
+        # return cash * np.exp(-r*t) * n_vect(-d2)
+        return cash * np.exp(-r*t) * norm.cdf(-d2)
+    else:
+        raise FinError("Option type must be a Binary Call or Put")
 
 
-# def asset_or_nothing(f_pay, fwd, t, k, r, v, option_type):
-#     """Price a binary asset-or-nothing option using Black model."""
-#     d1, _ = calculate_d1_d2(fwd, t, k, v)
-#     if option_type == OptionTypes.BINARY_CALL:
-#         return f_pay * np.exp(-r*t) * n_vect(d1)
-#     elif option_type == OptionTypes.BINARY_PUT:
-#         return f_pay * np.exp(-r*t) * n_vect(-d1)
-#     else:
-#         raise FinError("Option type must be a Binary Call or Put")
+def asset_or_nothing(f_pay, fwd, t, k, r, v, option_type):
+    """Price a binary asset-or-nothing option using Black model."""
+    d1, _ = calculate_d1_d2(fwd, t, k, v)
+    if option_type == OptionTypes.BINARY_CALL:
+        # return f_pay * np.exp(-r*t) * n_vect(d1)
+        return f_pay * np.exp(-r*t) * norm.cdf(d1)
+    elif option_type == OptionTypes.BINARY_PUT:
+        # return f_pay * np.exp(-r*t) * n_vect(-d1)
+        return f_pay * np.exp(-r*t) * norm.cdf(-d1)
+    else:
+        raise FinError("Option type must be a Binary Call or Put")
 
 
 @njit(float64[:](float64, float64, float64, float64), fastmath=True,
@@ -128,79 +132,3 @@ def calculate_d1_d2(f, t, k, v):
     d2 = d1 - vol * sqrt_t
 
     return np.array([d1, d2])
-
-
-###############################################################################
-
-
-def cash_or_nothing(fwd, t, k, r, v, cash, option_type):
-    """
-    Price a binary cash-or-nothing option using Black model.
-    
-    Parameters
-    ----------
-    fwd : float
-        Forward price
-    t : float
-        Time to expiry in years
-    k : float
-        Strike price
-    r : float
-        Risk-free rate (continuous compounding)
-    v : float
-        Volatility
-    cash : float
-        Cash amount paid if option is in the money
-    option_type : OptionTypes
-        BINARY_CALL or BINARY_PUT
-        
-    Returns
-    -------
-    float
-        Option value
-    """
-    d1, d2 = calculate_d1_d2(fwd, t, k, v)
-    if option_type == OptionTypes.BINARY_CALL:
-        return cash * np.exp(-r * t) * norm.cdf(d2)
-    elif option_type == OptionTypes.BINARY_PUT:
-        return cash * np.exp(-r * t) * norm.cdf(-d2)
-    else:
-        raise FinError("Option type must be a Binary Call or Put")
-
-
-###############################################################################
-
-
-def asset_or_nothing(fwd, t, k, r, v, f_pay, option_type):
-    """
-    Price a binary asset-or-nothing option using Black model.
-    
-    Parameters
-    ----------
-    fwd : float
-        Forward price
-    t : float
-        Time to expiry in years
-    k : float
-        Strike price
-    r : float
-        Risk-free rate (continuous compounding)
-    v : float
-        Volatility
-    f_pay : float
-        Forward price at which the asset is paid
-    option_type : OptionTypes
-        BINARY_CALL or BINARY_PUT
-        
-    Returns
-    -------
-    float
-        Option value
-    """
-    d1, d2 = calculate_d1_d2(fwd, t, k, v)
-    if option_type == OptionTypes.BINARY_CALL:
-        return f_pay * np.exp(-r * t) * norm.cdf(d1)
-    elif option_type == OptionTypes.BINARY_PUT:
-        return f_pay * np.exp(-r * t) * norm.cdf(-d1)
-    else:
-        raise FinError("Option type must be a Binary Call or Put")

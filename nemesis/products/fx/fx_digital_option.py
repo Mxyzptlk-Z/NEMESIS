@@ -1,8 +1,3 @@
-###############################################################################
-# FX Digital/Binary Options
-# Implements cash-or-nothing and asset-or-nothing binary options
-###############################################################################
-
 import numpy as np
 
 from ...utils.calendar import Calendar, CalendarTypes
@@ -25,9 +20,9 @@ from .fx_option import FXOption
 class FXBinaryOption(FXOption):
     """
     FX Binary Option (Cash-or-Nothing or Asset-or-Nothing).
-    
-    A binary option pays a fixed cash amount (cash-or-nothing) or the 
-    underlying asset value (asset-or-nothing) if the option expires 
+
+    A binary option pays a fixed cash amount (cash-or-nothing) or the
+    underlying asset value (asset-or-nothing) if the option expires
     in the money.
     """
 
@@ -42,7 +37,7 @@ class FXBinaryOption(FXOption):
         pay_on_equal: bool,  # Whether to pay when spot == strike
         cal_type: CalendarTypes,
         spot_days: int = 0,
-        cash_settle: bool = True  # Cash settlement mode
+        cash_settle: bool = True  # Cash settlement
     ):
         """
         Create an FX Binary Option.
@@ -54,7 +49,7 @@ class FXBinaryOption(FXOption):
         strike_fx_rate : float
             Strike FX rate (domestic per foreign)
         currency_pair : str
-            Currency pair in FORDOM format (e.g., 'EURUSD')
+            Currency pair in FORDOM format
         option_type : OptionTypes
             BINARY_CALL or BINARY_PUT
         cash : float
@@ -74,33 +69,33 @@ class FXBinaryOption(FXOption):
 
         super().__init__(currency_pair, cal_type)
 
-        calendar = Calendar(cal_type)
-        payment_dt = calendar.add_business_days(expiry_dt, spot_days)
+        payment_dt = self.calendar.add_business_days(expiry_dt, spot_days)
 
         if payment_dt < expiry_dt:
             raise FinError("Payment date must be on or after expiry date.")
 
-        if len(currency_pair) != 6:
-            raise FinError("Currency pair must be 6 characters.")
+        self.expiry_dt = expiry_dt
+        self.payment_dt = payment_dt
+
+        if np.any(strike_fx_rate < 0.0):
+            raise FinError("Negative strike.")
+
+        self.strike_fx_rate = strike_fx_rate
 
         if cash_currency != self.dom_name and cash_currency != self.for_name:
             raise FinError("Cash currency must be in currency pair.")
+
+        self.cash_currency = cash_currency
+
+        self.cash = cash
 
         if (
             option_type != OptionTypes.BINARY_CALL
             and option_type != OptionTypes.BINARY_PUT
         ):
-            raise FinError("Option type must be BINARY_CALL or BINARY_PUT")
+            raise FinError("Unknown Option Type:" + option_type)
 
-        if np.any(strike_fx_rate < 0.0):
-            raise FinError("Negative strike.")
-
-        self.expiry_dt = expiry_dt
-        self.payment_dt = payment_dt
-        self.strike_fx_rate = strike_fx_rate
         self.option_type = option_type
-        self.cash = cash
-        self.cash_currency = cash_currency
         self.pay_on_equal = pay_on_equal
         self.spot_days = spot_days
         self.cash_settle = cash_settle
@@ -116,7 +111,7 @@ class FXBinaryOption(FXOption):
         dc_type: DayCountTypes
     ):
         """
-        Calculate the value of the FX Binary Option.
+        Calculate the value of FX Binary Option.
 
         Parameters
         ----------
@@ -140,47 +135,22 @@ class FXBinaryOption(FXOption):
             raise FinError("Valuation date is not a Date")
 
         if value_dt > self.expiry_dt:
-            # After expiry, value is 0
-            return {"value": 0.0}
+            raise FinError("Valuation date after expiry date.")
 
         day_count = DayCount(dc_type)
         t_exp = day_count.year_frac(value_dt, self.expiry_dt)[0]
 
-        dom_df = domestic_curve.df(self.payment_dt, dc_type) / domestic_curve.df(value_dt, dc_type)
+        if t_exp < 0.0:
+            raise FinError("Time to expiry must be positive.")
 
-        # On expiry date, calculate final payment
-        if value_dt == self.expiry_dt:
-            spot = forward_curve.spot_rate
-            if self.option_type == OptionTypes.BINARY_CALL:
-                if spot > self.strike_fx_rate:
-                    npv = self.cash * dom_df
-                elif spot == self.strike_fx_rate and self.pay_on_equal:
-                    npv = self.cash * dom_df
-                else:
-                    npv = 0.0
-            else:  # BINARY_PUT
-                if spot < self.strike_fx_rate:
-                    npv = self.cash * dom_df
-                elif spot == self.strike_fx_rate and self.pay_on_equal:
-                    npv = self.cash * dom_df
-                else:
-                    npv = 0.0
-
-            # Convert if cash is in foreign currency
-            if self.cash_currency == self.for_name:
-                if self.cash_settle:
-                    atm_pay = forward_curve.get_forward_spot(self.expiry_dt, dc_type)
-                else:
-                    atm_pay = forward_curve.get_forward(self.payment_dt, dc_type)
-                npv = npv * atm_pay
-
-            return {"value": npv}
-
-        # Before expiry, use Black model
         t_exp = np.maximum(t_exp, 1e-10)
+
+        dom_df = domestic_curve.df(self.payment_dt, dc_type) / domestic_curve.df(value_dt, dc_type)
         r_d = -np.log(dom_df) / t_exp
 
+        k = self.strike_fx_rate
         fwd = forward_curve.get_forward_spot(self.expiry_dt, dc_type)
+
         volatility = vol_surface.interp_vol(self.expiry_dt, self.strike_fx_rate)
 
         if np.any(volatility < 0.0):
@@ -195,12 +165,12 @@ class FXBinaryOption(FXOption):
             else:
                 atm_pay = forward_curve.get_forward(self.payment_dt, dc_type)
             npv = self.cash * asset_or_nothing(
-                fwd, t_exp, self.strike_fx_rate, r_d, v, atm_pay, self.option_type
+                atm_pay, fwd, t_exp, k, r_d, v, self.option_type
             )
         else:
             # Cash-or-nothing
             npv = cash_or_nothing(
-                fwd, t_exp, self.strike_fx_rate, r_d, v, self.cash, self.option_type
+                self.cash, fwd, t_exp, k, r_d, v, self.option_type
             )
 
         return {"value": npv}
@@ -226,8 +196,8 @@ class FXBinaryOption(FXOption):
 class FXDigitalOption(FXOption):
     """
     FX Digital Option with different payoffs above and below the strike.
-    
-    This is implemented as a combination of two binary options:
+
+    Implemented as a combination of two binary options:
     - A put binary paying coupon_left when spot < strike
     - A call binary paying coupon_right when spot > strike
     """
@@ -275,8 +245,7 @@ class FXDigitalOption(FXOption):
 
         super().__init__(currency_pair, cal_type)
 
-        calendar = Calendar(cal_type)
-        payment_dt = calendar.add_business_days(expiry_dt, spot_days)
+        payment_dt = self.calendar.add_business_days(expiry_dt, spot_days)
 
         if payment_dt < expiry_dt:
             raise FinError("Payment date must be on or after expiry date.")

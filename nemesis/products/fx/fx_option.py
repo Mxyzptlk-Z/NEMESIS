@@ -24,6 +24,9 @@ class FXOption(ABC):
         currency_pair: str,
         cal_type: CalendarTypes
     ):
+        if len(currency_pair) != 6:
+            raise FinError("Currency pair must be 6 characters.")
+
         self.currency_pair = currency_pair
         self.for_name = self.currency_pair[0:3]
         self.dom_name = self.currency_pair[3:6]

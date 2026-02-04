@@ -51,8 +51,7 @@ class FXVanillaOption(FXOption):
 
         super().__init__(currency_pair, cal_type)
 
-        calendar = Calendar(cal_type)
-        delivery_dt = calendar.add_business_days(expiry_dt, spot_days)
+        delivery_dt = self.calendar.add_business_days(expiry_dt, spot_days)
 
         """ The FX rate the price in domestic currency ccy2 of a single unit
         of the foreign currency which is ccy1. For example EURUSD of 1.3 is the
@@ -61,9 +60,6 @@ class FXVanillaOption(FXOption):
         if delivery_dt < expiry_dt:
             raise FinError("Delivery date must be on or after expiry date.")
 
-        if len(currency_pair) != 6:
-            raise FinError("Currency pair must be 6 characters.")
-
         self.expiry_dt = expiry_dt
         self.delivery_dt = delivery_dt
 
@@ -71,10 +67,6 @@ class FXVanillaOption(FXOption):
             raise FinError("Negative strike.")
 
         self.strike_fx_rate = strike_fx_rate
-
-        self.currency_pair = currency_pair
-        self.for_name = self.currency_pair[0:3]
-        self.dom_name = self.currency_pair[3:6]
 
         if prem_currency != self.dom_name and prem_currency != self.for_name:
             raise FinError("Premium currency not in currency pair.")
