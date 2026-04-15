@@ -77,7 +77,7 @@ class OIS:
         cal_type: CalendarTypes = CalendarTypes.WEEKEND,
         bd_type: BusDayAdjustTypes = BusDayAdjustTypes.FOLLOWING,
         dg_type: DateGenRuleTypes = DateGenRuleTypes.BACKWARD,
-        reset_freq: str = 'None',
+        reset_freq: FrequencyTypes | None = None,
         fixing_days: int = 0,
         end_of_month: bool = False,
         is_ois_leg: bool = False,
@@ -99,7 +99,6 @@ class OIS:
             self.termination_dt = effective_dt.add_tenor(term_dt_or_tenor)
 
         calendar = Calendar(cal_type)
-
         self.maturity_dt = calendar.adjust(self.termination_dt, bd_type)
 
         if effective_dt > self.maturity_dt:

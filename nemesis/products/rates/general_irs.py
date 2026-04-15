@@ -78,7 +78,7 @@ class GeneralSwap:
         cal_type: CalendarTypes = CalendarTypes.WEEKEND,
         bd_type: BusDayAdjustTypes = BusDayAdjustTypes.FOLLOWING,
         dg_type: DateGenRuleTypes = DateGenRuleTypes.BACKWARD,
-        reset_freq: str = 'None',
+        reset_freq: FrequencyTypes | None = None,
         fixing_days: int = 0,
         end_of_month: bool = False,
         is_ois_leg: bool = False,
@@ -103,7 +103,7 @@ class GeneralSwap:
         self.maturity_dt = calendar.adjust(self.termination_dt, bd_type)
 
         if effective_dt > self.maturity_dt:
-            raise FinError("Start date after maturity date")
+            raise FinError("Effective date after maturity date")
 
         self.effective_dt = effective_dt
 
@@ -156,7 +156,7 @@ class GeneralSwap:
         self, value_dt: Date, index_curve: DiscountCurve, discount_curve: DiscountCurve
     ):
         """Value the interest rate swap on a value date given an index
-        curve and a disocunt curve."""
+        curve and a discount curve."""
 
         fixed_leg_value = self.fixed_leg.value(value_dt, discount_curve)
 
