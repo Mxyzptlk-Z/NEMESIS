@@ -6,6 +6,7 @@ from chinese_calendar import is_holiday
 from .date import Date
 from .error import FinError
 
+
 # from numba import njit, jit, int64, boolean
 
 easterMondayDay = [98, 90, 103, 95, 114, 106, 91, 111, 102, 87,
@@ -67,6 +68,7 @@ class CalendarTypes(Enum):
     CHINA = 16
     JOINT = 17
     CDS = 18
+    CHINA_IB = 19
 
 
 class DateGenRuleTypes(Enum):
@@ -83,21 +85,19 @@ class Calendar:
     convention and then applies that to any date that falls on a holiday in the
     specified calendar. """
 
-    def __init__(self, cal_type):
+    def __new__(cls, cal_type: CalendarTypes):
+        """ Factory: delegate to _CALENDAR_CLASSES registry for subclass dispatch. """
+        if cls is Calendar:
+            subclass = _CALENDAR_CLASSES.get(cal_type)
+            if subclass is not None:
+                return object.__new__(subclass)
+        return object.__new__(cls)
+
+    def __init__(self, cal_type: CalendarTypes):
         """ Create a calendar based on a specified calendar type. """
-
-        # 修改这里，允许传入 JointCalendar 实例
-        if isinstance(cal_type, CalendarTypes):
-            self.cal_type = cal_type
-            self.joint_calendar = None
-        elif isinstance(cal_type, JointCalendar):
-            self.cal_type = CalendarTypes.JOINT
-            self.joint_calendar = cal_type
-        else:
-            raise FinError(
-                "Need to pass FinCalendarType or JointCalendar and not " +
-                str(cal_type))
-
+        if not isinstance(cal_type, CalendarTypes):
+            raise FinError("Need to pass CalendarTypes, not " + str(type(cal_type)))
+        self.cal_type = cal_type
         self.day_in_year = None
         self.weekday = None
 
@@ -226,19 +226,9 @@ class Calendar:
         """ Determines if a date is a business day according to the specified
         calendar. If it is it returns True, otherwise False. """
 
-        # 如果是联合日历，使用联合日历的逻辑
-        if self.cal_type == CalendarTypes.JOINT and self.joint_calendar is not None:
-            return self.joint_calendar.is_business_day(dt)
-
-        # For all calendars so far, SAT and SUN are not business days
-        # If this ever changes I will need to add a filter here.
         if dt.is_weekend():
             return False
-
-        if self.is_holiday(dt) is True:
-            return False
-        else:
-            return True
+        return not self.is_holiday(dt)
 
 ###############################################################################
 
@@ -247,10 +237,6 @@ class Calendar:
         """ Determines if a date is a Holiday according to the specified
         calendar. Weekends are not holidays unless the holiday falls on a
         weekend date. """
-
-        # 如果是联合日历，使用联合日历的逻辑
-        if self.cal_type == CalendarTypes.JOINT and self.joint_calendar is not None:
-            return self.joint_calendar.is_holiday(dt)
 
         start_dt = Date(1, 1, dt.y)
         self.day_in_year = dt.excel_dt - start_dt.excel_dt + 1
@@ -286,17 +272,12 @@ class Calendar:
             return self.holiday_united_kingdom(dt)
         elif self.cal_type == CalendarTypes.UNITED_STATES:
             return self.holiday_united_states(dt)
-        elif self.cal_type == CalendarTypes.CHINA:
+        elif self.cal_type in (CalendarTypes.CHINA, CalendarTypes.CHINA_IB):
             return self.holiday_china(dt)
-        elif self.cal_type == CalendarTypes.JOINT:
-            # 对于联合日历类型，使用 JointCalendar 的逻辑
-            # 但这里不会被调用，因为 JointCalendar 重写了 is_holiday 方法
-            return False
         elif self.cal_type == CalendarTypes.CDS:
             return self.holiday_5u(dt)
         else:
-            print(self.cal_type)
-            raise FinError("Unknown calendar")
+            raise FinError("Unknown calendar: " + str(self.cal_type))
 
 ###############################################################################
 
@@ -604,7 +585,7 @@ class Calendar:
         d = dt.d
         y = dt.y
         day_in_year = self.day_in_year
-        weekday = self.weekday
+        weekday = self.weekday  # noqa: F841
 
         if m == 1 and d == 1:  # new years day
             return True
@@ -648,7 +629,7 @@ class Calendar:
         m = dt.m
         d = dt.d
         y = dt.y
-        day_in_year = self.day_in_year
+        day_in_year = self.day_in_year  # noqa: F841
         weekday = self.weekday
 
         if m == 1 and d == 1:  # new years day
@@ -815,7 +796,7 @@ class Calendar:
         d = dt.d
         y = dt.y
         day_in_year = self.day_in_year
-        weekday = self.weekday
+        weekday = self.weekday  # noqa: F841
 
         if m == 1 and d == 1:  # new years day
             return True
@@ -1056,7 +1037,7 @@ class Calendar:
 ###############################################################################
 
     def holiday_china(self, dt: Date):
-        """ Chiense legal holidays, exclude weekends."""
+        """ Chinese legal holidays (including makeup working days). """
 
         m = dt.m
         d = dt.d
@@ -1065,16 +1046,10 @@ class Calendar:
 
         date = datetime.date(y, m, d)
 
-        if y >= 2026:
-            if weekday == Date.SAT or weekday == Date.SUN:
-                return True
-            else:
-                return False
-        else:
-            if weekday == Date.SAT or weekday == Date.SUN:
-                return False
-            else:
-                return is_holiday(date)
+        try:
+            return is_holiday(date)
+        except Exception:
+            return weekday == Date.SAT or weekday == Date.SUN
 
 ###############################################################################
 
@@ -1165,82 +1140,69 @@ class Calendar:
 
 ###############################################################################
 
-class JointCalendar:
+class ChinaIBCalendar(Calendar):
+    """Interbank calendar (CFETS): makeup working days (e.g. a Sunday shifted
+    to compensate for a weekday holiday) count as business days.
+
+    Difference from CHINA (exchange) calendar:
+    - CHINA   : weekends are never business days (stock/futures exchanges)
+    - CHINA_IB: makeup-weekend days are business days (FR007, Shibor, etc.)
+
+    chinese_calendar.is_holiday() already embeds makeup-day logic, so we
+    delegate directly without a prior weekend check.
+
+    Usage:
+        cal = ChinaIBCalendar()                  # direct construction
+        cal = Calendar(CalendarTypes.CHINA_IB)   # equivalent, via __new__ dispatch
     """
-    联合日历：将多个日历类型合并，节假日取并集。
-    只要任一子日历认为是节假日，则该天为节假日。
+
+    def __init__(self, _cal_type=None):
+        super().__init__(CalendarTypes.CHINA_IB)
+
+    def is_business_day(self, dt: Date) -> bool:
+        return not self.is_holiday(dt)
+
+
+###############################################################################
+
+
+class JointCalendar(Calendar):
+    """Joint calendar: a day is a business day only when ALL constituent
+    calendars are open; a day is a holiday when ANY constituent calendar
+    treats it as one.
+
+    Subclasses Calendar and overrides is_business_day / is_holiday.
+    adjust(), add_business_days(), and get_holiday_list() are inherited
+    and work correctly via polymorphism.
+
+    Usage:
+        cal = JointCalendar([CalendarTypes.CHINA_IB, CalendarTypes.UNITED_STATES])
     """
 
     def __init__(self, calendar_types):
-        """
-        :param calendar_types: CalendarTypes枚举值列表
-        """
         if not calendar_types or not all(isinstance(c, CalendarTypes) for c in calendar_types):
-            raise FinError("JointCalendar 需要至少一个 CalendarTypes 枚举值")
-
-        # 存储子日历对象和类型
-        self.calendars = [Calendar(cal_type) for cal_type in calendar_types]
+            raise FinError("JointCalendar requires at least one CalendarTypes value")
+        super().__init__(CalendarTypes.JOINT)
+        self.calendars = [Calendar(ct) for ct in calendar_types]
         self.calendar_types = calendar_types
 
-        # 添加 value 属性，使其更像 CalendarTypes 枚举值
-        self.value = CalendarTypes.JOINT.value
-        self.name = "JOINT"
+    def is_business_day(self, dt: Date) -> bool:
+        return all(cal.is_business_day(dt) for cal in self.calendars)
 
-    def is_business_day(self, dt: Date):
-        """
-        只要有一个子日历不是工作日，则该天不是工作日
-        """
-        for cal in self.calendars:
-            if not cal.is_business_day(dt):
-                return False
-        return True
-
-    def is_holiday(self, dt: Date):
-        """
-        只要有一个子日历认为是节假日，则该天为节假日
-        """
-        for cal in self.calendars:
-            if cal.is_holiday(dt):
-                return True
-        return False
-
-    def adjust(self, dt: Date, bd_type: BusDayAdjustTypes):
-        """
-        根据业务日调整规则调整日期
-        """
-        # 创建一个临时 Calendar 对象来处理调整
-        temp_cal = Calendar(self)
-        return temp_cal.adjust(dt, bd_type)
-
-    def add_business_days(self, start_dt: Date, num_days: int):
-        """
-        添加指定数量的工作日
-        """
-        # 创建一个临时 Calendar 对象来处理添加业务日
-        temp_cal = Calendar(self)
-        return temp_cal.add_business_days(start_dt, num_days)
-
-    def get_holiday_list(self, year: float):
-        """
-        返回所有子日历的节假日并集（去重，非周末）
-        """
-        start_dt = Date(1, 1, year)
-        end_dt = Date(1, 1, year + 1)
-        holiday_list = []
-
-        while start_dt < end_dt:
-            # 使用联合日历的业务日判断逻辑
-            if self.is_business_day(start_dt) is False and start_dt.is_weekend() is False:
-                holiday_list.append(start_dt.__str__())
-
-            start_dt = start_dt.add_days(1)
-
-        return holiday_list
+    def is_holiday(self, dt: Date) -> bool:
+        return any(cal.is_holiday(dt) for cal in self.calendars)
 
     def __str__(self):
         return "JointCalendar(" + ", ".join([str(c) for c in self.calendar_types]) + ")"
 
     def __repr__(self):
         return self.__str__()
+
+###############################################################################
+
+
+_CALENDAR_CLASSES: dict[CalendarTypes, type] = {
+    CalendarTypes.CHINA_IB: ChinaIBCalendar,
+}
 
 ###############################################################################

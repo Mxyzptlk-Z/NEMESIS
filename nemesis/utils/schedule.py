@@ -233,7 +233,7 @@ class Schedule:
                     
                         unadjusted_schedule_dts.append(next_dt)
                         tot_num_weeks = num_weeks * (flow_num)
-                        next_dt = self.termination_dt.add_weeks(tot_num_weeks)
+                        next_dt = self.effective_dt.add_weeks(tot_num_weeks)
                     
                     if self.end_of_month is True:
                         next_dt = next_dt.eom()

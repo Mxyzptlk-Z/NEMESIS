@@ -1,18 +1,16 @@
+import datetime
+import math
 from collections.abc import Iterable
-from functools import partial
 from enum import Enum
-
-from typing import Union, TYPE_CHECKING
-from numba import njit
+from functools import partial
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
-import datetime
+from numba import njit
 
-import math
-
-# from financepy.utils.error import FinError
 from .error import FinError
 from .tenor import Tenor, TenorUnit
+
 
 if TYPE_CHECKING:
     from .calendar import CalendarTypes
@@ -877,43 +875,6 @@ class Date:
             return new_dts
         else:
             return new_dts[0]
-    
-    ###########################################################################
-    
-    def add_week_tenor(self, tenor: Union[str, Tenor]):
-        """Return the date following the Date by a period given by the
-        tenor which is a string consisting of a number and a letter, the
-        letter being d, w, m , y for day, week, month or year. This is case
-        independent. For example 10Y means 10 years while 120m also means 10
-        years. The date is weekend but not holiday calendar adjusted."""
-
-        new_dt = self.add_tenor(tenor)
-        
-        while new_dt.weekday == Date.SAT or new_dt.weekday == Date.SUN:
-            new_dt = new_dt.add_days(1)
-        
-        return new_dt
-
-    ###########################################################################
-    
-    # Only adjust to following, not recommended
-    # TODO: use calendar.adjust()
-    def add_business_tenor(self, tenor: Union[str, Tenor], cal_type: "CalendarTypes"):
-        """Return the date following the Date by a period given by the
-        tenor which is a string consisting of a number and a letter, the
-        letter being d, w, m , y for day, week, month or year. This is case
-        independent. For example 10Y means 10 years while 120m also means 10
-        years. The date is weekend and holiday calendar adjusted."""
-
-        from .calendar import Calendar
-
-        new_dt = self.add_week_tenor(tenor)
-
-        cal = Calendar(cal_type)
-        while not cal.is_business_day(new_dt):
-            new_dt = new_dt.add_days(1)
-        
-        return new_dt
 
     ###########################################################################
 

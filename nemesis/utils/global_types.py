@@ -2,6 +2,7 @@
 
 from enum import Enum
 
+
 ###############################################################################
 
 
@@ -52,6 +53,16 @@ class FinCapFloorTypes(Enum):
 class SwapTypes(Enum):
     PAY = 1
     RECEIVE = 2
+
+
+###############################################################################
+
+
+class CompoundingType(Enum):
+    EXCLUDE_SPREAD = 1   # Compound sub-period rates excluding spread
+    INCLUDE_SPREAD = 2   # Compound sub-period rates including spread
+    SIMPLE = 3           # Weighted average of sub-period rates
+    AVERAGE = 4          # Arithmetic average of sub-period rates
 
 
 ###############################################################################

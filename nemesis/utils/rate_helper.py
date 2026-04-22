@@ -1,12 +1,9 @@
 import numpy as np
 
-from .calendar import Calendar
-from .day_count import DayCount
-from .schedule import Schedule
+from .calendar import BusDayAdjustTypes, Calendar
+from .day_count import DayCount, DayCountTypes
 from .error import FinError
-
-from .day_count import DayCountTypes
-from .calendar import BusDayAdjustTypes
+from .schedule import Schedule
 
 
 def get_real_fixing_date(fixing_date, cal_type):
@@ -31,13 +28,13 @@ def get_forward_rate(index_curve, cal_type, today, fixing_date, use_last_fixing=
                 rate = index_curve.fixing.loc[last_fixing_date.datetime().strftime("%Y%m%d")]["Fixing"]
             else:
                 real_date = calendar.add_business_days(real_fixing_date, num_days=index_curve.spot_days)
-                real_end_date = real_fixing_date.add_business_tenor(index_curve.tenor, cal_type)
+                real_end_date = calendar.adjust(real_fixing_date.add_tenor(index_curve.tenor), BusDayAdjustTypes.FOLLOWING)
                 rate = index_curve.fwd_rate(real_date, real_end_date, dc_type=index_curve.dc_type)
     else:
         real_date = calendar.add_business_days(real_fixing_date, num_days=index_curve.spot_days)
-        real_end_date = real_date.add_business_tenor(index_curve.tenor, cal_type)
+        real_end_date = calendar.adjust(real_date.add_tenor(index_curve.tenor), BusDayAdjustTypes.FOLLOWING)
         rate = index_curve.fwd_rate(real_date, real_end_date, dc_type=index_curve.dc_type)
-    
+
     return rate
 
 
@@ -74,7 +71,7 @@ def get_ois_float_rate(index_curve, fixing_freq_type, cal_type, dc_type, today, 
             else:
                 sch = Schedule(start_date, last_reset_date, fixing_freq_type, cal_type, bd_type=BusDayAdjustTypes.FOLLOWING)
                 fixed_dates = sch.adjusted_dts
-            rate_array = get_fixing_rates(index_curve, "1D", cal_type, today, fixed_dates, use_last_fixing)
+            rate_array = get_fixing_rates(index_curve, cal_type, today, fixed_dates, use_last_fixing)
             reset_dates = np.append(fixed_dates, end_date)
         reset_period_dcf = np.array([day_count.year_frac(reset_dates[i], reset_dates[i+1])[0] for i in range(np.size(reset_dates) - 1)])
         float_rate = (np.prod(rate_array * reset_period_dcf + 1) - 1) / np.sum(reset_period_dcf)
@@ -91,27 +88,27 @@ def get_comp_float_rate(index_curve, today, cal_type, fixing_dates, reset_dates,
 
     if len(rate_array) == 1:
         float_rate = rate_array[0] + spread / 10000.0
-    
+
     elif compounding_type == 'ExcludeSprd':
-        float_rate = ((np.prod(rate_array * reset_period_dcf + 1) - 1) 
+        float_rate = ((np.prod(rate_array * reset_period_dcf + 1) - 1)
                         / np.sum(reset_period_dcf))
         float_rate += spread / 10000.0
-        
+
     elif compounding_type == 'IncludeSprd':
         rate_array = rate_array + spread / 10000.0
         float_rate = ((np.prod(rate_array * reset_period_dcf + 1) - 1)
                         / np.sum(reset_period_dcf))
-        
+
     elif compounding_type == 'Simple':
         float_rate = (np.sum(rate_array * reset_period_dcf)
                         / np.sum(reset_period_dcf))
         float_rate += spread / 10000.0
-        
+
     elif compounding_type == 'Average':
         float_rate = np.mean(rate_array)
         float_rate += spread / 10000.0
 
     else:
         raise Exception(f'Unsupported compounding type: {compounding_type}')
-    
+
     return float_rate

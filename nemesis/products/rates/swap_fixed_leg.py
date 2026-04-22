@@ -1,22 +1,26 @@
 import numpy as np
 import pandas as pd
-from typing import Union
 
-from ...utils.error import FinError
+from ...market.curves.discount_curve import DiscountCurve
+from ...utils.calendar import (
+    BusDayAdjustTypes,
+    Calendar,
+    CalendarTypes,
+    DateGenRuleTypes,
+)
 from ...utils.date import Date
-from ...utils.math import ONE_MILLION
 from ...utils.day_count import DayCount, DayCountTypes
+from ...utils.error import FinError
 from ...utils.frequency import FrequencyTypes
-from ...utils.calendar import CalendarTypes, DateGenRuleTypes
-from ...utils.calendar import Calendar, BusDayAdjustTypes
-from ...utils.schedule import Schedule
+from ...utils.global_types import SwapTypes
 from ...utils.helpers import (
+    check_argument_types,
     format_table,
     label_to_string,
-    check_argument_types,
 )
-from ...utils.global_types import SwapTypes
-from ...market.curves.discount_curve import DiscountCurve
+from ...utils.math import ONE_MILLION
+from ...utils.schedule import Schedule
+
 
 ##########################################################################
 
@@ -29,7 +33,7 @@ class SwapFixedLeg:
     def __init__(
         self,
         effective_dt: Date,  # Date interest starts to accrue
-        end_dt: Union[Date, str],  # Date contract ends
+        end_dt: Date | str,  # Date contract ends
         leg_type: SwapTypes,
         coupon: float,
         freq_type: FrequencyTypes,
@@ -52,7 +56,7 @@ class SwapFixedLeg:
             self.termination_dt = end_dt
         else:
             self.termination_dt = effective_dt.add_tenor(end_dt)
-        
+
         calendar = Calendar(cal_type)
 
         self.maturity_dt = calendar.adjust(self.termination_dt, bd_type)
