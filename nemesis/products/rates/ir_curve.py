@@ -1,5 +1,3 @@
-import copy
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -87,10 +85,10 @@ class InterestRateCurve(DiscountCurve):
         ois_fras: list,
         ois_swaps: list,
         interp_type: InterpTypes = InterpTypes.FLAT_FWD_RATES,
-        dc_type: DayCountTypes = DayCountTypes.ACT_360,
+        dc_type: DayCountTypes = DayCountTypes.ACT_365F,
         check_refit: bool = False,
         is_index: bool = True,
-        currency: str | None = None
+        currency: str | None = None,
     ):
         """Create an instance of an overnight index rate swap curve given a
         valuation date and a set of OIS rates. Some of these may
@@ -104,7 +102,7 @@ class InterestRateCurve(DiscountCurve):
 
         self.value_dt = value_dt
         self._interp_type = interp_type
-        self._dc_type = dc_type
+        self.dc_type = dc_type
 
         self.check_refit = check_refit
         self._interpolator = None
@@ -125,16 +123,20 @@ class InterestRateCurve(DiscountCurve):
 
     ###############################################################################
 
-    def print_table(self, payment_dt: list):
+    def print_table(
+        self,
+        payment_dt: list[Date],
+        dc_type: DayCountTypes = DayCountTypes.ACT_365F
+    ):
         """Print a table of zero rate and discount factor on pivot dates."""
 
         zr = self.zero_rate(
             payment_dt,
-            freq_type = FrequencyTypes.CONTINUOUS,
-            dc_type = DayCountTypes.ACT_365F
+            freq_type=FrequencyTypes.CONTINUOUS,
+            dc_type=dc_type
         )
 
-        df = self.df(payment_dt, day_count = DayCountTypes.ACT_365F)
+        df = self.df(payment_dt, self.dc_type)
 
         payment_dt_datetime = [dt.datetime() for dt in payment_dt]
         curve_result = pd.DataFrame({"Date": payment_dt_datetime, "ZR": (zr*100).round(5), "DF": df.round(6)})
@@ -323,30 +325,12 @@ class InterestRateCurve(DiscountCurve):
 
         if num_depos == 0 and num_fras == 0 and num_swaps > 0:
             if swap_start_dt > self.value_dt:
-
-                # if num_depos == 0:
-                #     raise FinError("Need a deposit rate to pin down short end.")
-
-                if depo_start_dt > self.value_dt:
-                    first_depo = ois_deposits[0]
-                    if first_depo.effective_dt > self.value_dt:
-                        print("Inserting synthetic deposit")
-                        synthetic_deposit = copy.deepcopy(first_depo)
-                        synthetic_deposit.effective_dt = self.value_dt
-                        synthetic_deposit.maturity_dt = first_depo.effective_dt
-                        ois_deposits.insert(0, synthetic_deposit)
-                        num_depos += 1
+                pass
 
         # Now determine which instruments are used
         self.used_deposits = ois_deposits
         self.used_fras = ois_fras
         self.used_swaps = ois_swaps
-
-        # Need the floating leg basis for the curve
-        if len(self.used_swaps) > 0:
-            self.dc_type = ois_swaps[0].float_leg.dc_type
-        else:
-            self.dc_type = None
 
     ###############################################################################
 
@@ -378,7 +362,7 @@ class InterestRateCurve(DiscountCurve):
             self._interpolator.fit(self._times, self._dfs)
             self.pillar_dts.append(depo.maturity_dt)
 
-        old_t_mat = t_mat
+        old_t_mat = self._times[-1]
 
         for fra in self.used_fras:
 
@@ -431,7 +415,7 @@ class InterestRateCurve(DiscountCurve):
             self.pillar_dts.append(last_payment_dt)
 
         if self.check_refit is True:
-            self.check_refits(1e-10, SWAP_TOL, 1e-5)
+            self._check_refits(1e-10, SWAP_TOL, 1e-5)
 
     ###############################################################################
 
@@ -443,6 +427,7 @@ class InterestRateCurve(DiscountCurve):
         self._interpolator = Interpolator(self._interp_type)
         self._times = np.array([])
         self._dfs = np.array([])
+        self.pillar_dts = [self.value_dt]
 
         # time zero is now.
         t_mat = 0.0
@@ -451,14 +436,16 @@ class InterestRateCurve(DiscountCurve):
         self._dfs = np.append(self._dfs, df_mat)
 
         for depo in self.used_deposits:
-            df_settle = self.df(depo.start_dt)
-            df_mat = depo.maturity_df() * df_settle
+            t_set = times_from_dates(depo.effective_dt, self.value_dt, self.dc_type)
             t_mat = times_from_dates(depo.maturity_dt, self.value_dt, self.dc_type)
+            zero_rate = np.log(1.0 + depo.deposit_rate * depo.accrual_factor) / (t_mat - t_set)
+            df_mat = np.exp(-zero_rate * t_mat)
             self._times = np.append(self._times, t_mat)
             self._dfs = np.append(self._dfs, df_mat)
             self._interpolator.fit(self._times, self._dfs)
+            self.pillar_dts.append(depo.maturity_dt)
 
-        old_t_mat = t_mat
+        old_t_mat = self._times[-1]
 
         for fra in self.used_fras:
 
@@ -488,10 +475,11 @@ class InterestRateCurve(DiscountCurve):
                     maxiter=50,
                     fprime2=None,
                 )
+            self.pillar_dts.append(fra.maturity_dt)
 
         if len(self.used_swaps) == 0:
             if self.check_refit is True:
-                self.check_refits(1e-10, SWAP_TOL, 1e-5)
+                self._check_refits(1e-10, SWAP_TOL, 1e-5)
             return
 
         #######################################################################
@@ -510,7 +498,7 @@ class InterestRateCurve(DiscountCurve):
         # We use the longest swap assuming it has a superset of ALL of the
         # swap flow dates used in the curve construction
         longest_swap = self.used_swaps[-1]
-        cpn_dts = longest_swap.adjusted_fixed_dts
+        cpn_dts = longest_swap.fixed_leg.payment_dts
         num_flows = len(cpn_dts)
 
         # Find where first cpn without discount factor starts
@@ -531,8 +519,8 @@ class InterestRateCurve(DiscountCurve):
         # may be different from the maturity date due to a holiday adjustment
         # and the swap rates need to align with the cpn payment dates
         for swap in self.used_swaps:
-            swap_rate = swap.fixed_cpn
-            maturity_dt = swap.adjusted_fixed_dts[-1]
+            swap_rate = swap.fixed_leg.cpn
+            maturity_dt = swap.fixed_leg.payment_dts[-1]
             tswap = times_from_dates(maturity_dt, self.value_dt, self.dc_type)
             swap_times.append(tswap)
             swap_rates.append(swap_rate)
@@ -548,12 +536,12 @@ class InterestRateCurve(DiscountCurve):
 
         # Do I need this line ?
         interpolated_swap_rates[0] = interpolated_swap_rates[1]
-        accrual_factors = longest_swap.fixed_year_fracs
+        accrual_factors = longest_swap.fixed_leg.year_fracs
 
         acc = 0.0
         df = 1.0
         pv01 = 0.0
-        df_settle = self.df(longest_swap.start_dt)
+        df_settle = self.df(longest_swap.effective_dt)
 
         for i in range(1, start_index):
             dt = cpn_dts[i]
@@ -574,11 +562,12 @@ class InterestRateCurve(DiscountCurve):
             self._times = np.append(self._times, t_mat)
             self._dfs = np.append(self._dfs, df_mat)
             self._interpolator.fit(self._times, self._dfs)
+            self.pillar_dts.append(dt)
 
             pv01 += acc * df_mat
 
         if self.check_refit is True:
-            self.check_refits(1e-10, SWAP_TOL, 1e-5)
+            self._check_refits(1e-10, SWAP_TOL, 1e-5)
 
     ###############################################################################
 

@@ -3,21 +3,19 @@
 ###############################################################################
 
 
-import numpy as np
 from typing import Union
 
-from .interpolator import Interpolator, InterpTypes, interpolate
+import numpy as np
 
 from ...utils.date import Date
-from ...utils.error import FinError
-from ...utils.global_vars import g_days_in_year, g_small
-from ...utils.frequency import annual_frequency, FrequencyTypes
 from ...utils.day_count import DayCount, DayCountTypes
+from ...utils.error import FinError
+from ...utils.frequency import FrequencyTypes, annual_frequency
+from ...utils.global_vars import g_days_in_year, g_small
+from ...utils.helpers import check_argument_types, label_to_string, times_from_dates
 from ...utils.math import test_monotonicity
 from ...utils.schedule import Schedule
-from ...utils.helpers import check_argument_types
-from ...utils.helpers import times_from_dates
-from ...utils.helpers import label_to_string
+from .interpolator import Interpolator, InterpTypes, interpolate
 
 
 ###############################################################################
@@ -36,6 +34,7 @@ class DiscountCurve:
         df_dates: list,
         df_values: np.ndarray,
         interp_type: InterpTypes = InterpTypes.FLAT_FWD_RATES,
+        dc_type: DayCountTypes = DayCountTypes.ACT_365F,
     ):
         """Create the discount curve from a vector of times and discount
         factors with an anchor date and specify an interpolation scheme. As we
@@ -65,7 +64,7 @@ class DiscountCurve:
                 start_index = 1
 
         for i in range(start_index, num_points):
-            t = (df_dates[i] - value_dt) / g_days_in_year
+            t = times_from_dates(df_dates[i], value_dt, dc_type)
             self._times.append(t)
             self._dfs.append(df_values[i])
 
@@ -77,8 +76,7 @@ class DiscountCurve:
 
         self.value_dt = value_dt
         self.freq_type = FrequencyTypes.CONTINUOUS
-        # This needs to be thought about - I just assign an arbitrary value
-        self.dc_type = DayCountTypes.ACT_360
+        self.dc_type = dc_type
 
         self._dfs = np.array(self._dfs)
         self._interp_type = interp_type
@@ -193,7 +191,7 @@ class DiscountCurve:
         if isinstance(dc_type, DayCountTypes) is False:
             raise FinError("Invalid Day Count type.")
 
-        dfs = self.df(dts, day_count=dc_type)
+        dfs = self.df(dts)
         zero_rates = self._df_to_zero(dfs, dts, freq_type, dc_type)
 
         if isinstance(dts, Date):
@@ -291,12 +289,13 @@ class DiscountCurve:
 
     ###########################################################################
 
-    def df(self, dt: Union[list, Date], day_count=DayCountTypes.ACT_ACT_ISDA):
+    def df(self, dt: Union[list, Date], dc_type: DayCountTypes = None):
         """Function to calculate a discount factor from a date or a
         vector of dates. The day count determines how dates get converted to
-        years. I allow this to default to ACT_ACT_ISDA unless specified."""
+        years."""
 
-        times = times_from_dates(dt, self.value_dt, day_count)
+        day_count_type = dc_type or self.dc_type
+        times = times_from_dates(dt, self.value_dt, day_count_type)
         dfs = self.df_t(times)
 
         if isinstance(dfs, float):
@@ -396,7 +395,7 @@ class DiscountCurve:
             values[i] = values[i] * np.exp(-bump_size * t)
 
         disc_curve = DiscountCurve(
-            self.value_dt, times, values, self._interp_type
+            self.value_dt, times, values, self._interp_type, self.dc_type
         )
 
         return disc_curve
@@ -437,8 +436,8 @@ class DiscountCurve:
                 dt2 = date_or_tenor[i]
 
             year_frac = day_count.year_frac(dt1, dt2)[0]
-            df1 = self.df(dt1, day_count=DayCountTypes.ACT_365F)
-            df2 = self.df(dt2, day_count=DayCountTypes.ACT_365F)
+            df1 = self.df(dt1, dc_type)
+            df2 = self.df(dt2, dc_type)
             fwd_rate = (df1 / df2 - 1.0) / year_frac
             fwd_rates.append(fwd_rate)
 
@@ -456,7 +455,7 @@ class DiscountCurve:
         s += label_to_string("DATES", "DISCOUNT FACTORS")
         for i in range(0, num_points):
             s += label_to_string(
-                "%12s" % self._df_dates[i], "%12.8f" % self._dfs[i]
+                f"{self._df_dates[i]:12s}", f"{self._dfs[i]:12.8f}"
             )
 
         return s
