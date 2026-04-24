@@ -1,98 +1,70 @@
 import numpy as np
-from typing import Union
 
-from ...utils.error import FinError
+from ...market.curves.discount_curve import DiscountCurve
+from ...market.indices.interest_rate_index import (
+    FixingSource,
+    InterestRateIndex,
+)
+from ...utils.calendar import (
+    BusDayAdjustTypes,
+    Calendar,
+    CalendarTypes,
+    DateGenRuleTypes,
+)
 from ...utils.date import Date
 from ...utils.day_count import DayCountTypes
+from ...utils.error import FinError
 from ...utils.frequency import FrequencyTypes
-from ...utils.calendar import CalendarTypes, DateGenRuleTypes
-from ...utils.calendar import Calendar, BusDayAdjustTypes
-from ...utils.helpers import check_argument_types, label_to_string
-from ...utils.math import ONE_MILLION
 from ...utils.global_types import SwapTypes
-from ...market.curves.discount_curve import DiscountCurve
-from .ql_curve import QLCurve
-
+from ...utils.helpers import label_to_string
+from ...utils.math import ONE_MILLION
 from .swap_fixed_leg import SwapFixedLeg
-from .swap_float_leg import SwapFloatLeg
-
-###############################################################################
-
-from enum import Enum
-
-
-class FinCompoundingTypes(Enum):
-    COMPOUNDED = 1
-    OVERNIGHT_COMPOUNDED_ANNUAL_RATE = 2
-    AVERAGED = 3
-    AVERAGED_DAILY = 4
+from .swap_float_leg import FloatRateSpec, SwapFloatLeg
 
 
 ###############################################################################
 
 
-class GeneralSwap:
-    """Class for managing overnight index rate swaps (OIS) and Fed Fund swaps.
-    This is a contract in which a fixed payment leg is exchanged for a payment
-    which pays the rolled-up overnight index rate (OIR). There is no exchange
-    of par. The contract is entered into at zero initial cost.
+class InterestRateSwap:
+    """Class for managing fixed-vs-floating interest rate swaps.
 
-    NOTE: This class is almost identical to IborSwap but will possibly
-    deviate as distinctions between the two become clear to me. If not they
-    will be converged (or inherited) to avoid duplication.
+    Covers all vanilla IRS types (OIS, IBOR, Term Rate) — the floating rate
+    behaviour is fully controlled by the FloatLegSpec passed to the float leg.
 
-    The contract lasts from a start date to a specified maturity date.
-    The fixed cpn is the OIS fixed rate for the corresponding tenor which is
-    set at contract initiation.
+    The contract lasts from an effective date to a termination date. The fixed
+    coupon is set at inception. The floating rate is determined from an index
+    curve (and optionally a separate discount curve for dual-curve pricing).
 
-    The floating rate is not known fully until the end of each payment period.
-    It's calculated at the contract maturity and is based on daily observations
-    of the overnight index rate which are compounded according to a specific
-    convention. Hence the OIS floating rate is determined by the history of the
-    OIS rates.
-
-    In its simplest form, there is just one fixed rate payment and one floating
-    rate payment at contract maturity. However when the contract becomes longer
-    than one year the floating and fixed payments become periodic, usually with
-    annual exchanges of cash.
-
-    The value of the contract is the NPV of the two cpn streams. Discounting
-    is done on the OIS curve which is itself implied by the term structure of
-    market OIS rates."""
+    value() accepts a single discount curve for single-curve pricing,
+    or an explicit discount curve for dual-curve pricing while projection is
+    provided explicitly at valuation time."""
 
     def __init__(
         self,
-        effective_dt: Date,  # Date interest starts to accrue
-        term_dt_or_tenor: Union[Date, str],  # Date contract ends
+        effective_dt: Date,
+        term_dt_or_tenor: Date | str,
         fixed_leg_type: SwapTypes,
-        fixed_cpn: float,  # Fixed cpn (annualised)
+        fixed_cpn: float,
         fixed_freq_type: FrequencyTypes,
         fixed_dc_type: DayCountTypes,
-        notional: float = ONE_MILLION,
-        payment_lag: int = 0,  # Number of days after period payment occurs
-        float_multiplier: float = 1.0,
-        float_spread: float = 0.0,
-        float_compounding_type: str = 'ExcludeSprd',
         float_freq_type: FrequencyTypes = FrequencyTypes.ANNUAL,
         float_dc_type: DayCountTypes = DayCountTypes.THIRTY_E_360,
+        rate_index: InterestRateIndex | None = None,
+        rate_spec: FloatRateSpec | None = None,
+        notional: float = ONE_MILLION,
+        payment_lag: int = 0,
         cal_type: CalendarTypes = CalendarTypes.WEEKEND,
         bd_type: BusDayAdjustTypes = BusDayAdjustTypes.FOLLOWING,
         dg_type: DateGenRuleTypes = DateGenRuleTypes.BACKWARD,
-        reset_freq: FrequencyTypes | None = None,
-        fixing_days: int = 0,
         end_of_month: bool = False,
-        is_ois_leg: bool = False,
     ):
-        """Create an overnight index swap contract giving the contract start
-        date, its maturity, fixed cpn, fixed leg frequency, fixed leg day
-        count convention and notional. The floating leg parameters have default
-        values that can be overwritten if needed. The start date is contractual
-        and is the same as the settlement date for a new swap. It is the date
-        on which interest starts to accrue. The end of the contract is the
-        termination date. This is not adjusted for business days. The adjusted
-        termination date is called the maturity date. This is calculated."""
+        """Create a fixed-vs-floating interest rate swap."""
 
-        check_argument_types(self.__init__, locals())
+        if rate_index is None:
+            raise FinError("rate_index is required")
+
+        if rate_spec is None:
+            rate_spec = FloatRateSpec()
 
         if isinstance(term_dt_or_tenor, Date):
             self.termination_dt = term_dt_or_tenor
@@ -106,10 +78,13 @@ class GeneralSwap:
             raise FinError("Effective date after maturity date")
 
         self.effective_dt = effective_dt
+        self.notional = notional
+        self.rate_index = rate_index
 
-        float_leg_type = SwapTypes.PAY
         if fixed_leg_type == SwapTypes.PAY:
             float_leg_type = SwapTypes.RECEIVE
+        else:
+            float_leg_type = SwapTypes.PAY
 
         principal = 0.0
 
@@ -126,46 +101,73 @@ class GeneralSwap:
             cal_type,
             bd_type,
             dg_type,
-            end_of_month
+            end_of_month,
         )
 
         self.float_leg = SwapFloatLeg(
             effective_dt,
             self.termination_dt,
             float_leg_type,
-            float_multiplier,
-            float_spread,
-            float_compounding_type,
             float_freq_type,
             float_dc_type,
+            rate_index,
+            rate_spec,
             notional,
             principal,
             payment_lag,
             cal_type,
             bd_type,
             dg_type,
-            reset_freq,
-            fixing_days,
             end_of_month,
-            is_ois_leg,
         )
 
     ###########################################################################
 
     def value(
-        self, value_dt: Date, index_curve: DiscountCurve, discount_curve: DiscountCurve
+        self,
+        value_dt: Date,
+        discount_curve: DiscountCurve = None,
+        projection_curve: DiscountCurve | None = None,
+        fixing_source: FixingSource | None = None,
+        pv_only: bool = True,
     ):
-        """Value the interest rate swap on a value date given an index
-        curve and a discount curve."""
+        """Value the interest rate swap.
 
-        fixed_leg_value = self.fixed_leg.value(value_dt, discount_curve)
+        Args:
+            discount_curve: Curve for discounting cash flows.
+            projection_curve: Curve for projecting forward rates. Falls back
+                to discount_curve for single-curve pricing.
+            fixing_source: Source for historical fixings.
+        """
 
-        float_leg_value = self.float_leg.value(
-            value_dt, index_curve, discount_curve
+        if discount_curve is None and projection_curve is None:
+            raise FinError("At least one of discount_curve or projection_curve is required")
+        if discount_curve is None:
+            discount_curve = projection_curve
+        if projection_curve is None:
+            projection_curve = discount_curve
+
+        fixed_leg_value = self.fixed_leg.value(
+            value_dt, discount_curve, pv_only=pv_only
         )
 
-        value = fixed_leg_value + float_leg_value
-        return value
+        float_leg_value = self.float_leg.value(
+            value_dt,
+            discount_curve,
+            projection_curve=projection_curve,
+            fixing_source=fixing_source,
+            pv_only=pv_only,
+        )
+
+        if pv_only:
+            return fixed_leg_value + float_leg_value
+        else:
+            import pandas as pd
+            value = fixed_leg_value[0] + float_leg_value[0]
+            cashflow_report = pd.concat(
+                [fixed_leg_value[1], float_leg_value[1]], ignore_index=True
+            )
+            return value, cashflow_report
 
     ###########################################################################
 
@@ -181,18 +183,32 @@ class GeneralSwap:
 
     ###########################################################################
 
-    def swap_rate(self, value_dt, index_curve, discount_curve):
+    def swap_rate(
+        self,
+        value_dt,
+        discount_curve: DiscountCurve = None,
+        projection_curve: DiscountCurve | None = None,
+        fixing_source: FixingSource | None = None,
+    ):
         """Calculate the fixed leg cpn that makes the swap worth zero.
-        If the valuation date is before the swap payments start then this
-        is the forward swap rate as it starts in the future. The swap rate
-        is then a forward swap rate and so we use a forward discount
-        factor. If the swap fixed leg has begun then we have a spot
-        starting swap."""
+
+        If discount_curve is None, projection curve is used for discounting
+        (single-curve pricing)."""
+
+        if discount_curve is None and projection_curve is None:
+            raise FinError("At least one of discount_curve or projection_curve is required")
+        if discount_curve is None:
+            discount_curve = projection_curve
+        if projection_curve is None:
+            projection_curve = discount_curve
 
         pv01 = self.pv01(value_dt, discount_curve)
 
         float_leg_value = self.float_leg.value(
-            value_dt, index_curve, discount_curve
+            value_dt,
+            discount_curve,
+            projection_curve=projection_curve,
+            fixing_source=fixing_source,
         )
 
         cpn = float_leg_value / pv01 / self.fixed_leg.notional
@@ -200,52 +216,107 @@ class GeneralSwap:
 
     ###########################################################################
 
-    def dv01(self, value_dt, index_curve, discount_curve, tweak=1e-4):
-        """Calculate the value of swap with 1 basis point up/down the swap market rate."""
+    def get_fixed_rate(self):
+        """Read access to the coupon (fixed rate)."""
+        return self.fixed_leg.cpn
 
-        if index_curve._from_ql:
-        
-            ql_index_curve_up = index_curve.ql_curve.tweak_parallel(tweak)
-            index_curve_up = QLCurve(value_dt, ql_index_curve_up, index_curve.dc_type, index_curve._interp_type)
-            ql_index_curve_down = index_curve.ql_curve.tweak_parallel(-tweak)
-            index_curve_down = QLCurve(value_dt, ql_index_curve_down, index_curve.dc_type, index_curve._interp_type)
+    ###########################################################################
 
-        if discount_curve._from_ql:
+    def set_fixed_rate(self, new_rate: float):
+        """Update the fixed rate and regenerate payments."""
+        self.fixed_leg.cpn = new_rate
+        self.fixed_leg.generate_payments()
 
-            ql_discount_curve_up = discount_curve.ql_curve.tweak_parallel(tweak)
-            discount_curve_up = QLCurve(value_dt, ql_discount_curve_up, discount_curve.dc_type, discount_curve._interp_type)
-            ql_discount_curve_down = discount_curve.ql_curve.tweak_parallel(-tweak)
-            discount_curve_down = QLCurve(value_dt, ql_discount_curve_down, discount_curve.dc_type, discount_curve._interp_type)
+    ###########################################################################
 
-        npv_up = self.value(value_dt, index_curve_up, discount_curve_up)
-        npv_down = self.value(value_dt, index_curve_down, discount_curve_down)
-        
+    def dv01(
+        self,
+        value_dt,
+        discount_curve: DiscountCurve = None,
+        projection_curve: DiscountCurve | None = None,
+        fixing_source: FixingSource | None = None,
+        tweak=1e-4,
+    ):
+        """Calculate DV01 via parallel bump-and-reprice.
+
+        Requires QL-backed curves for both projection and discount."""
+
+        from .ql_curve import QLCurve
+
+        if projection_curve is None:
+            projection_curve = discount_curve
+        if discount_curve is None:
+            discount_curve = projection_curve
+
+        if projection_curve is None:
+            raise FinError("projection_curve is required for dv01")
+
+        if not getattr(projection_curve, "_from_ql", False):
+            raise FinError("Projection curve must be QL-backed for dv01")
+        if not getattr(discount_curve, "_from_ql", False):
+            raise FinError("Discount curve must be QL-backed for dv01")
+
+        ql_proj_curve_up = projection_curve.ql_curve.tweak_parallel(tweak)
+        proj_curve_up = QLCurve(
+            value_dt,
+            ql_proj_curve_up,
+            projection_curve.dc_type,
+            projection_curve._interp_type,
+        )
+        ql_proj_curve_down = projection_curve.ql_curve.tweak_parallel(-tweak)
+        proj_curve_down = QLCurve(
+            value_dt,
+            ql_proj_curve_down,
+            projection_curve.dc_type,
+            projection_curve._interp_type,
+        )
+
+        ql_discount_curve_up = discount_curve.ql_curve.tweak_parallel(tweak)
+        discount_curve_up = QLCurve(
+            value_dt,
+            ql_discount_curve_up,
+            discount_curve.dc_type,
+            discount_curve._interp_type,
+        )
+        ql_discount_curve_down = discount_curve.ql_curve.tweak_parallel(-tweak)
+        discount_curve_down = QLCurve(
+            value_dt,
+            ql_discount_curve_down,
+            discount_curve.dc_type,
+            discount_curve._interp_type,
+        )
+
+        npv_up = self.value(
+            value_dt,
+            discount_curve_up,
+            projection_curve=proj_curve_up,
+            fixing_source=fixing_source,
+        )
+
+        npv_down = self.value(
+            value_dt,
+            discount_curve_down,
+            projection_curve=proj_curve_down,
+            fixing_source=fixing_source,
+        )
+
         dv01 = (npv_up - npv_down) / (2 * tweak) * 1e-4
-        
+
         return dv01
 
     ###########################################################################
 
     def print_fixed_leg_pv(self):
-        """Prints the fixed leg amounts without any valuation details. Shows
-        the dates and sizes of the promised fixed leg flows."""
-
         self.fixed_leg.print_valuation()
 
     ###########################################################################
 
-    def print_float_leg_pv(self):
-        """Prints the fixed leg amounts without any valuation details. Shows
-        the dates and sizes of the promised fixed leg flows."""
-
-        self.float_leg.print_valuation()
+    def print_float_leg_pv(self, cashflow_df=None):
+        self.float_leg.print_valuation(cashflow_df)
 
     ###########################################################################
 
     def print_payments(self):
-        """Prints the fixed leg amounts without any valuation details. Shows
-        the dates and sizes of the promised fixed leg flows."""
-
         self.fixed_leg.print_payments()
         self.float_leg.print_payments()
 
@@ -261,8 +332,6 @@ class GeneralSwap:
     ###########################################################################
 
     def _print(self):
-        """Print a list of the unadjusted cpn payment dates used in
-        analytic calculations for the bond."""
         print(self)
 
 
