@@ -1,10 +1,8 @@
-from .error import FinError
+from .calendar import BusDayAdjustTypes, Calendar, CalendarTypes, DateGenRuleTypes
 from .date import Date
-from .calendar import Calendar, CalendarTypes
-from .calendar import BusDayAdjustTypes, DateGenRuleTypes
-from .frequency import annual_frequency, FrequencyTypes
-from .helpers import label_to_string
-from .helpers import check_argument_types
+from .error import FinError
+from .frequency import FrequencyTypes, annual_frequency
+from .helpers import check_argument_types, label_to_string
 
 
 ###############################################################################
@@ -140,7 +138,7 @@ class Schedule:
         frequency = annual_frequency(self.freq_type)
         num_months = int(12 / frequency)
         num_weeks = 0
-        
+
         if num_months == 0 and self.freq_type == FrequencyTypes.WEEKLY:
             num_weeks = 1
 
@@ -152,20 +150,20 @@ class Schedule:
             next_dt = self.termination_dt
             flow_num = 0
             num_days = 1
-            
+
             while next_dt > self.effective_dt:
-                
+
                 if calendar.is_business_day(next_dt):
                     self.adjusted_dts.append(next_dt)
-                
+
                 tot_num_days = num_days * (1 + flow_num)
                 next_dt = self.termination_dt.add_days(-tot_num_days)
                 flow_num += 1
-            
+
             self.adjusted_dts.append(next_dt)
             self.adjusted_dts = self.adjusted_dts[::-1]
             self.adjust_termination_dt = False
-        
+
         else:
 
             if self.dg_type == DateGenRuleTypes.BACKWARD:
@@ -176,17 +174,17 @@ class Schedule:
                 while next_dt > self.effective_dt:
 
                     if num_months != 0:
-                        
+
                         unadjusted_schedule_dts.append(next_dt)
                         tot_num_months = num_months * (1 + flow_num)
                         next_dt = self.termination_dt.add_months(-tot_num_months)
-                    
+
                     elif num_weeks != 0:
-                    
+
                         unadjusted_schedule_dts.append(next_dt)
                         tot_num_weeks = num_weeks * (1 + flow_num)
                         next_dt = self.termination_dt.add_weeks(-tot_num_weeks)
-                    
+
                     if self.end_of_month is True:
                         next_dt = next_dt.eom()
 
@@ -228,13 +226,13 @@ class Schedule:
                         unadjusted_schedule_dts.append(next_dt)
                         tot_num_months = num_months * (flow_num)
                         next_dt = self.effective_dt.add_months(tot_num_months)
-                    
+
                     elif num_weeks != 0:
-                    
+
                         unadjusted_schedule_dts.append(next_dt)
                         tot_num_weeks = num_weeks * (flow_num)
                         next_dt = self.effective_dt.add_weeks(tot_num_weeks)
-                    
+
                     if self.end_of_month is True:
                         next_dt = next_dt.eom()
 
@@ -245,7 +243,7 @@ class Schedule:
                     dt = calendar.adjust(unadjusted_schedule_dts[i], self.bd_type)
 
                     self.adjusted_dts.append(dt)
-                
+
                 self.adjusted_dts.append(self.termination_dt)
 
         if self.adjusted_dts[0] < self.effective_dt:

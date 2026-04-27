@@ -52,12 +52,11 @@ class DataFrameFixingSource(FixingSource):
         if key_str in self.fixing_df.index:
             return float(self.fixing_df.loc[key_str][self.fixing_col])
 
-        key_dt = fixing_dt.datetime()
-        if key_dt in self.fixing_df.index:
-            return float(self.fixing_df.loc[key_dt][self.fixing_col])
+        key_ts = pd.Timestamp(fixing_dt.datetime())
+        if key_ts in self.fixing_df.index:
+            return float(self.fixing_df.loc[key_ts][self.fixing_col])
 
         if self.fallback_to_last:
-            key_ts = pd.Timestamp(key_dt)
             if pd.api.types.is_string_dtype(self.fixing_df.index):
                 idx_dt = pd.to_datetime(self.fixing_df.index, format="%Y%m%d")
             else:
@@ -182,6 +181,9 @@ class OvernightIndex(InterestRateIndex):
             return (compound - 1.0) / total_dcf
 
         # Partial: historical fixings up to value_dt + one forward for remainder
+        if fixing_source is None:
+            raise FinError("Require fixing data source for in-progress OIS period")
+
         fixed_reset_dts = list(self._iter_business_days(start_dt, value_dt.add_days(1)))
         next_reset_dt = self.calendar.adjust(value_dt.add_days(1), BusDayAdjustTypes.FOLLOWING)
         compound = self._compound_fixings(fixed_reset_dts, next_reset_dt, value_dt, multiplier, fixing_source)
