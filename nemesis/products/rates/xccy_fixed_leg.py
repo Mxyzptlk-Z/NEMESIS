@@ -1,22 +1,28 @@
-import numpy as np
-import pandas as pd
 from typing import Union
 
-from ...utils.error import FinError
+import numpy as np
+import pandas as pd
+
+from ...market.curves.discount_curve import DiscountCurve
+from ...utils.calendar import (
+    BusDayAdjustTypes,
+    Calendar,
+    CalendarTypes,
+    DateGenRuleTypes,
+)
 from ...utils.date import Date
-from ...utils.math import ONE_MILLION
 from ...utils.day_count import DayCount, DayCountTypes
+from ...utils.error import FinError
 from ...utils.frequency import FrequencyTypes
-from ...utils.calendar import CalendarTypes, DateGenRuleTypes
-from ...utils.calendar import Calendar, BusDayAdjustTypes
-from ...utils.schedule import Schedule
+from ...utils.global_types import SwapTypes
 from ...utils.helpers import (
+    check_argument_types,
     format_table,
     label_to_string,
-    check_argument_types,
 )
-from ...utils.global_types import SwapTypes
-from ...market.curves.discount_curve import DiscountCurve
+from ...utils.math import ONE_MILLION
+from ...utils.schedule import Schedule
+
 
 ##########################################################################
 
@@ -55,7 +61,7 @@ class XccySwapFixedLeg:
             self.termination_dt = end_dt
         else:
             self.termination_dt = effective_dt.add_tenor(end_dt)
-        
+
         calendar = Calendar(cal_type)
 
         self.maturity_dt = calendar.adjust(self.termination_dt, bd_type)
@@ -167,7 +173,7 @@ class XccySwapFixedLeg:
         self.cumulative_pvs = []
 
         notional = self.notional
-        df_value = discount_curve.df(value_dt, day_count=DayCountTypes.ACT_365F)
+        df_value = discount_curve.df(value_dt)
         leg_pv = 0.0
         num_payments = len(self.payment_dts)
 
@@ -180,7 +186,7 @@ class XccySwapFixedLeg:
 
             if payment_dt > value_dt:
 
-                df_payment = discount_curve.df(payment_dt, day_count=DayCountTypes.ACT_365F) / df_value
+                df_payment = discount_curve.df(payment_dt) / df_value
                 payment_pv = pmnt_amount * df_payment
                 leg_pv += payment_pv
 
@@ -193,10 +199,10 @@ class XccySwapFixedLeg:
                 self.payment_dfs.append(0.0)
                 self.payment_pvs.append(0.0)
                 self.cumulative_pvs.append(0.0)
-        
+
         if self.is_init_notional_ex:
             if self.effective_dt > value_dt:
-                df_settle = discount_curve.df(self.effective_dt, day_count=DayCountTypes.ACT_365F) / discount_curve.df(value_dt, day_count=DayCountTypes.ACT_365F)
+                df_settle = discount_curve.df(self.effective_dt) / discount_curve.df(value_dt)
                 payment_pv = - self.principal * df_settle * notional
                 self.payment_pvs.insert(1, payment_pv)
                 leg_pv += payment_pv
@@ -220,18 +226,18 @@ class XccySwapFixedLeg:
     ###########################################################################
 
     # def notional_ex_npv(self, value_dt, discount_curve, final_notional_ex_paydate):
-        
+
     #     npv = 0.0
     #     if self.is_init_notional_ex and self.effective_dt > value_dt:
     #         init_ex_df = discount_curve.df(self.effective_dt, day_count=DayCountTypes.ACT_365F) / discount_curve.df(value_dt, day_count=DayCountTypes.ACT_365F)
     #         npv -= self.init_notional_ex * init_ex_df
-            
+
     #     if self.is_final_notional_ex and final_notional_ex_paydate > value_dt:
     #         final_ex_df = discount_curve.df(final_notional_ex_paydate, day_count=DayCountTypes.ACT_365F) / discount_curve.df(value_dt, day_count=DayCountTypes.ACT_365F)
     #         npv += self.final_notional_ex * final_ex_df
-            
+
     #     npv *= 1 if self.leg_type == SwapTypes.RECEIVE else -1
-            
+
     #     return npv
 
     ###########################################################################

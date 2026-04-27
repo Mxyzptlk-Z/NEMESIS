@@ -58,7 +58,7 @@ class SwapTypes(Enum):
 ###############################################################################
 
 
-class CompoundingType(Enum):
+class CompoundingTypes(Enum):
     EXCLUDE_SPREAD = 1   # Compound sub-period rates excluding spread
     INCLUDE_SPREAD = 2   # Compound sub-period rates including spread
     SIMPLE = 3           # Weighted average of sub-period rates

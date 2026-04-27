@@ -20,7 +20,7 @@ from ...utils.date import Date
 from ...utils.day_count import DayCount, DayCountTypes
 from ...utils.error import FinError
 from ...utils.frequency import FrequencyTypes
-from ...utils.global_types import CompoundingType, SwapTypes
+from ...utils.global_types import CompoundingTypes, SwapTypes
 from ...utils.helpers import (
     format_table,
     label_to_string,
@@ -39,7 +39,7 @@ class FloatRateSpec:
 
     multiplier: float = 1.0
     spread: float = 0.0
-    compounding_type: CompoundingType | None = None
+    compounding_type: CompoundingTypes | None = None
     reset_freq_type: FrequencyTypes | None = None
     reset_dg_type: DateGenRuleTypes = DateGenRuleTypes.FORWARD
 
@@ -301,21 +301,21 @@ class SwapFloatLeg:
         spread = self.rate_spec.spread
         total_dcf = np.sum(sub_dcfs)
 
-        if compounding_type == CompoundingType.EXCLUDE_SPREAD:
+        if compounding_type == CompoundingTypes.EXCLUDE_SPREAD:
             # Compound index rates, then add spread once
             compounded = (np.prod(sub_rates * sub_dcfs + 1.0) - 1.0) / total_dcf
             return compounded + spread
 
-        elif compounding_type == CompoundingType.INCLUDE_SPREAD:
+        elif compounding_type == CompoundingTypes.INCLUDE_SPREAD:
             # Compound (index + spread) together — spread is already embedded
             sub_rates_s = sub_rates + spread
             return (np.prod(sub_rates_s * sub_dcfs + 1.0) - 1.0) / total_dcf
 
-        elif compounding_type == CompoundingType.SIMPLE:
+        elif compounding_type == CompoundingTypes.SIMPLE:
             # Weighted average of index rates, then add spread
             return np.sum(sub_rates * sub_dcfs) / total_dcf + spread
 
-        elif compounding_type == CompoundingType.AVERAGE:
+        elif compounding_type == CompoundingTypes.AVERAGE:
             # Arithmetic average of index rates, then add spread
             return np.mean(sub_rates) + spread
 

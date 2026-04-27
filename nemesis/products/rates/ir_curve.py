@@ -16,7 +16,7 @@ from ...utils.helpers import (
     times_from_dates,
 )
 from .deposit import InterestRateDeposit
-from .general_irs import InterestRateSwap
+from .ir_swap import InterestRateSwap
 
 
 SWAP_TOL = 1e-10
