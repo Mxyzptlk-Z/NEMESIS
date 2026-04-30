@@ -87,7 +87,6 @@ class InterestRateCurve(DiscountCurve):
         interp_type: InterpTypes = InterpTypes.FLAT_FWD_RATES,
         dc_type: DayCountTypes = DayCountTypes.ACT_365F,
         check_refit: bool = False,
-        is_index: bool = True,
         currency: str | None = None,
     ):
         """Create an instance of an overnight index rate swap curve given a
@@ -111,13 +110,7 @@ class InterestRateCurve(DiscountCurve):
 
         self._validate_inputs(ois_deposits, ois_fras, ois_swaps)
 
-        self._is_index = is_index
-        if is_index:
-            if not currency:
-                raise FinError("Must set `currency` for index curves")
-            self.ccy = currency
-        else:
-            self.ccy = None
+        self.ccy = currency
 
         self._build_curve()
 

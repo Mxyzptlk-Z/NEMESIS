@@ -1,3 +1,23 @@
 [build-system]
 requires = ["setuptools>=64.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (unused imports, undefined names, etc.)
+    "I",   # isort (import ordering)
+    "UP",  # pyupgrade (modernize syntax)
+    "B",   # flake8-bugbear (common bugs)
+]
+ignore = [
+    "E501",  # line too long — not enforced, manual control
+    "B008",  # do not perform function calls in default arguments
+    "B905",  # zip() without explicit strict parameter
+]
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+force-single-line = false
+split-on-trailing-comma = true
