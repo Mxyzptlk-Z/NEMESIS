@@ -166,6 +166,16 @@ class Schedule:
 
         else:
 
+            # ISDA EOM Rule: only apply end-of-month snap when the
+            # effective date or termination date falls on a month end.
+            apply_eom = (
+                self.end_of_month
+                and (
+                    self.effective_dt.is_eom()
+                    or self.termination_dt.is_eom()
+                )
+            )
+
             if self.dg_type == DateGenRuleTypes.BACKWARD:
 
                 next_dt = self.termination_dt
@@ -185,7 +195,7 @@ class Schedule:
                         tot_num_weeks = num_weeks * (1 + flow_num)
                         next_dt = self.termination_dt.add_weeks(-tot_num_weeks)
 
-                    if self.end_of_month is True:
+                    if apply_eom:
                         next_dt = next_dt.eom()
 
                     flow_num += 1
@@ -233,7 +243,7 @@ class Schedule:
                         tot_num_weeks = num_weeks * (flow_num)
                         next_dt = self.effective_dt.add_weeks(tot_num_weeks)
 
-                    if self.end_of_month is True:
+                    if apply_eom:
                         next_dt = next_dt.eom()
 
                     flow_num += 1
@@ -245,6 +255,38 @@ class Schedule:
                     self.adjusted_dts.append(dt)
 
                 self.adjusted_dts.append(self.termination_dt)
+
+            elif self.dg_type == DateGenRuleTypes.FORWARD_OVERSHOOT:
+
+                # Step forward from effective date in full intervals.
+                # The last period overshoots termination date if needed.
+                self.adjust_termination_dt = False
+                next_dt = self.effective_dt
+                flow_num = 1
+
+                unadjusted_schedule_dts.append(next_dt)
+
+                while next_dt < self.termination_dt:
+
+                    if num_months != 0:
+                        tot_num_months = num_months * flow_num
+                        next_dt = self.effective_dt.add_months(tot_num_months)
+
+                    elif num_weeks != 0:
+                        tot_num_weeks = num_weeks * flow_num
+                        next_dt = self.effective_dt.add_weeks(tot_num_weeks)
+
+                    if apply_eom:
+                        next_dt = next_dt.eom()
+
+                    unadjusted_schedule_dts.append(next_dt)
+                    flow_num += 1
+
+                # The effective date is not adjusted as it is given
+                self.adjusted_dts.append(unadjusted_schedule_dts[0])
+                for i in range(1, len(unadjusted_schedule_dts)):
+                    dt = calendar.adjust(unadjusted_schedule_dts[i], self.bd_type)
+                    self.adjusted_dts.append(dt)
 
         if self.adjusted_dts[0] < self.effective_dt:
             self.adjusted_dts[0] = self.effective_dt

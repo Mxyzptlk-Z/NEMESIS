@@ -344,6 +344,7 @@ class InterestRateCurve(DiscountCurve):
         self._times = np.array([])
         self._dfs = np.array([])
         self.pillar_dts = [self.value_dt]
+        self.display_dts = [self.value_dt]
 
         # time zero is now.
         t_mat = 0.0
@@ -361,6 +362,7 @@ class InterestRateCurve(DiscountCurve):
             self._dfs = np.append(self._dfs, df_mat)
             self._interpolator.fit(self._times, self._dfs)
             self.pillar_dts.append(depo.maturity_dt)
+            self.display_dts.append(depo.maturity_dt)
 
         old_t_mat = self._times[-1]
 
@@ -390,12 +392,12 @@ class InterestRateCurve(DiscountCurve):
                     fprime2=None,
                 )
             self.pillar_dts.append(fra.maturity_dt)
+            self.display_dts.append(fra.maturity_dt)
 
         for swap in self.used_swaps:
-            # I use the lastPaymentDate in case a date has been adjusted fwd
-            # over a holiday as the maturity date is usually not adjusted CHECK
             last_payment_dt = swap.fixed_leg.payment_dts[-1]
-            t_mat = times_from_dates(last_payment_dt, self.value_dt, self.dc_type)
+            pillar_dt = swap.float_leg.bootstrap_pillar_dt
+            t_mat = times_from_dates(pillar_dt, self.value_dt, self.dc_type)
 
             self._times = np.append(self._times, t_mat)
             self._dfs = np.append(self._dfs, df_mat)
@@ -412,7 +414,8 @@ class InterestRateCurve(DiscountCurve):
                 fprime2=None,
                 full_output=False,
             )
-            self.pillar_dts.append(last_payment_dt)
+            self.pillar_dts.append(pillar_dt)
+            self.display_dts.append(last_payment_dt)
 
         if self.check_refit is True:
             self._check_refits(1e-10, SWAP_TOL, 1e-5)

@@ -74,6 +74,7 @@ class CalendarTypes(Enum):
 class DateGenRuleTypes(Enum):
     FORWARD = 1
     BACKWARD = 2
+    FORWARD_OVERSHOOT = 3
 
 ###############################################################################
 

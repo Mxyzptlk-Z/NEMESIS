@@ -27,27 +27,18 @@ from ...utils.helpers import (
 )
 from ...utils.math import ONE_MILLION
 from ...utils.schedule import Schedule
+from .float_rate_rule import FloatRateRule, ResetCompoundedFloatRateRule
 
 
 ###############################################################################
 
 
-@dataclass
-class FloatRateSpec:
-    """Specification for how the floating rate is determined from an index
-    curve. Groups all parameters related to float rate computation."""
+@dataclass(kw_only=True)
+class FloatRateConvention:
+    """Plain floating-rate convention without reset compounding."""
 
     multiplier: float = 1.0
     spread: float = 0.0
-    compounding_type: CompoundingTypes | None = None
-    reset_freq_type: FrequencyTypes | None = None
-    reset_dg_type: DateGenRuleTypes = DateGenRuleTypes.FORWARD
-
-    def __post_init__(self):
-        if (self.compounding_type is None) != (self.reset_freq_type is None):
-            raise FinError(
-                "compounding_type and reset_freq_type must both be set or both be None"
-            )
 
     @property
     def spread_bps(self) -> float:
@@ -57,6 +48,22 @@ class FloatRateSpec:
     @spread_bps.setter
     def spread_bps(self, bps: float):
         self.spread = bps / 10000.0
+
+
+@dataclass(kw_only=True)
+class ResetCompoundedFloatRateConvention(FloatRateConvention):
+    """Floating-rate convention driven by reset sub-period compounding."""
+
+    compounding_type: CompoundingTypes
+    reset_freq_type: FrequencyTypes
+    reset_bd_type: BusDayAdjustTypes
+    reset_dg_type: DateGenRuleTypes
+
+
+def _create_float_rate_rule(convention: FloatRateConvention) -> FloatRateRule:
+    if isinstance(convention, ResetCompoundedFloatRateConvention):
+        return ResetCompoundedFloatRateRule(convention)
+    return FloatRateRule(convention)
 
 
 ###############################################################################
@@ -75,7 +82,7 @@ class SwapFloatLeg:
         freq_type: FrequencyTypes,
         dc_type: DayCountTypes,
         rate_index: InterestRateIndex,
-        rate_spec: FloatRateSpec | None = None,
+        float_convention: FloatRateConvention | None = None,
         notional: float = ONE_MILLION,
         principal: float = 0.0,
         payment_lag: int = 0,
@@ -91,8 +98,8 @@ class SwapFloatLeg:
         if rate_index is None:
             raise FinError("rate_index is required")
 
-        if rate_spec is None:
-            rate_spec = FloatRateSpec()
+        if float_convention is None:
+            float_convention = FloatRateConvention()
 
         if type(end_dt) is Date:
             self.termination_dt = end_dt
@@ -113,7 +120,8 @@ class SwapFloatLeg:
         self.principal = principal
         self.notional = notional
 
-        self.rate_spec = rate_spec
+        self.float_convention = float_convention
+        self.rate_rule: FloatRateRule = _create_float_rate_rule(float_convention)
         self.rate_index = rate_index
 
         self.dc_type = dc_type
@@ -187,140 +195,35 @@ class SwapFloatLeg:
 
     ###########################################################################
 
-    def _build_sub_period_schedule(self, start_dt, end_dt):
-        """Build sub-period schedule dates used for reset compounding."""
-
-        sch = Schedule(
-            start_dt,
-            end_dt,
-            self.rate_spec.reset_freq_type,
-            self.rate_index.cal_type,
-            bd_type=self.rate_index.bd_type,
-            dg_type=self.rate_spec.reset_dg_type,
-        )
-        return sch.adjusted_dts
-
-    ###########################################################################
-
-    def _compute_sub_period_rates(
-        self,
-        value_dt,
-        start_dt,
-        end_dt,
-        projection_curve: DiscountCurve | None = None,
-        fixing_source: FixingSource | None = None,
-    ):
-        """Compute index-driven rates and dcfs for each sub-period."""
-
-        sub_dts = self._build_sub_period_schedule(start_dt, end_dt)
-        day_counter = DayCount(self.dc_type)
-        sub_rates = []
-        sub_dcfs = []
-
-        for j in range(len(sub_dts) - 1):
-            reset_dt = sub_dts[j]
-            dt1 = sub_dts[j]
-            dt2 = sub_dts[j + 1]
-            dcf = day_counter.year_frac(dt1, dt2)[0]
-            sub_rates.append(
-                self.rate_index.period_rate(
-                    value_dt,
-                    reset_dt,
-                    dt1,
-                    dt2,
-                    projection_curve,
-                    self.rate_spec.multiplier,
-                    fixing_source,
-                )
-            )
-            sub_dcfs.append(dcf)
-
-        return np.array(sub_rates), np.array(sub_dcfs)
+    @property
+    def bootstrap_pillar_dt(self) -> Date:
+        return self.rate_rule.bootstrap_pillar_dt(self)
 
     ###########################################################################
 
     def _compute_period_rate(
         self,
-        value_dt,
-        reset_dt,
-        start_dt,
-        end_dt,
+        value_dt: Date,
+        reset_dt: Date,
+        start_dt: Date,
+        end_dt: Date,
         projection_curve: DiscountCurve | None = None,
         fixing_source: FixingSource | None = None,
-    ):
-        """Compute the full coupon rate for one accrual period (index + spread).
-
-        Returns the effective rate ready to be multiplied by alpha * notional.
-        Spread is applied exactly once here — never outside this method.
-
-        - If compounding_type is None: single-period forward + spread.
-        - Otherwise: sub-period forwards + compounding aggregator + spread.
-        """
+    ) -> float:
+        """Compute the full coupon rate for one accrual period."""
 
         if self.rate_index is None:
             raise FinError("rate_index is required for float leg valuation")
 
-        compounding_type = self.rate_spec.compounding_type
-        multiplier = self.rate_spec.multiplier
-        spread = self.rate_spec.spread
-
-        if compounding_type is None:
-            index_rate = self.rate_index.period_rate(
-                value_dt,
-                reset_dt,
-                start_dt,
-                end_dt,
-                projection_curve,
-                multiplier,
-                fixing_source,
-            )
-            return index_rate + spread
-
-        # Compounding path
-        sub_rates, sub_dcfs = self._compute_sub_period_rates(
+        return self.rate_rule.period_rate(
+            self,
             value_dt,
+            reset_dt,
             start_dt,
             end_dt,
             projection_curve=projection_curve,
             fixing_source=fixing_source,
         )
-
-        if len(sub_rates) == 1:
-            return sub_rates[0] + spread
-
-        return self._compound(sub_rates, sub_dcfs)
-
-    ###########################################################################
-
-    def _compound(self, sub_rates, sub_dcfs):
-        """Apply compounding to sub-period rates and return full coupon rate
-        (including spread). Spread is handled inside for INCLUDE_SPREAD;
-        for other modes, spread is added at the end."""
-
-        compounding_type = self.rate_spec.compounding_type
-        spread = self.rate_spec.spread
-        total_dcf = np.sum(sub_dcfs)
-
-        if compounding_type == CompoundingTypes.EXCLUDE_SPREAD:
-            # Compound index rates, then add spread once
-            compounded = (np.prod(sub_rates * sub_dcfs + 1.0) - 1.0) / total_dcf
-            return compounded + spread
-
-        elif compounding_type == CompoundingTypes.INCLUDE_SPREAD:
-            # Compound (index + spread) together — spread is already embedded
-            sub_rates_s = sub_rates + spread
-            return (np.prod(sub_rates_s * sub_dcfs + 1.0) - 1.0) / total_dcf
-
-        elif compounding_type == CompoundingTypes.SIMPLE:
-            # Weighted average of index rates, then add spread
-            return np.sum(sub_rates * sub_dcfs) / total_dcf + spread
-
-        elif compounding_type == CompoundingTypes.AVERAGE:
-            # Arithmetic average of index rates, then add spread
-            return np.mean(sub_rates) + spread
-
-        else:
-            raise FinError(f"Unsupported compounding type: {compounding_type}")
 
     ###########################################################################
 
@@ -463,7 +366,7 @@ class SwapFloatLeg:
 
         print("START DATE:", self.effective_dt)
         print("MATURITY DATE:", self.maturity_dt)
-        print("SPREAD (bp):", self.rate_spec.spread * 10000)
+        print("SPREAD (bp):", self.float_convention.spread * 10000)
         print("FREQUENCY:", str(self.freq_type))
         print("DAY COUNT:", str(self.dc_type))
 
@@ -505,7 +408,7 @@ class SwapFloatLeg:
 
         print("START DATE:", self.effective_dt)
         print("MATURITY DATE:", self.maturity_dt)
-        print("SPREAD (BPS):", self.rate_spec.spread * 10000)
+        print("SPREAD (BPS):", self.float_convention.spread * 10000)
         print("FREQUENCY:", str(self.freq_type))
         print("DAY COUNT:", str(self.dc_type))
 
@@ -551,7 +454,7 @@ class SwapFloatLeg:
         s += label_to_string("MATURITY DATE", self.maturity_dt)
         s += label_to_string("NOTIONAL", self.notional)
         s += label_to_string("SWAP TYPE", self.leg_type)
-        s += label_to_string("SPREAD (BPS)", self.rate_spec.spread * 10000)
+        s += label_to_string("SPREAD (BPS)", self.float_convention.spread * 10000)
         s += label_to_string("FREQUENCY", self.freq_type)
         s += label_to_string("DAY COUNT", self.dc_type)
         s += label_to_string("CALENDAR", self.cal_type)

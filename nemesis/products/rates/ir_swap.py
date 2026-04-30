@@ -19,7 +19,7 @@ from ...utils.global_types import SwapTypes
 from ...utils.helpers import label_to_string
 from ...utils.math import ONE_MILLION
 from .swap_fixed_leg import SwapFixedLeg
-from .swap_float_leg import FloatRateSpec, SwapFloatLeg
+from .swap_float_leg import FloatRateConvention, SwapFloatLeg
 
 
 ###############################################################################
@@ -29,7 +29,8 @@ class InterestRateSwap:
     """Class for managing fixed-vs-floating interest rate swaps.
 
     Covers all vanilla IRS types (OIS, IBOR, Term Rate) — the floating rate
-    behaviour is fully controlled by the FloatLegSpec passed to the float leg.
+    behaviour is controlled by the float rate convention passed to the float
+    leg, which is translated internally into the appropriate rate rule.
 
     The contract lasts from an effective date to a termination date. The fixed
     coupon is set at inception. The floating rate is determined from an index
@@ -50,7 +51,7 @@ class InterestRateSwap:
         float_freq_type: FrequencyTypes = FrequencyTypes.ANNUAL,
         float_dc_type: DayCountTypes = DayCountTypes.THIRTY_E_360,
         rate_index: InterestRateIndex | None = None,
-        rate_spec: FloatRateSpec | None = None,
+        float_convention: FloatRateConvention | None = None,
         notional: float = ONE_MILLION,
         payment_lag: int = 0,
         cal_type: CalendarTypes = CalendarTypes.WEEKEND,
@@ -63,8 +64,8 @@ class InterestRateSwap:
         if rate_index is None:
             raise FinError("rate_index is required")
 
-        if rate_spec is None:
-            rate_spec = FloatRateSpec()
+        if float_convention is None:
+            float_convention = FloatRateConvention()
 
         if isinstance(term_dt_or_tenor, Date):
             self.termination_dt = term_dt_or_tenor
@@ -111,7 +112,7 @@ class InterestRateSwap:
             float_freq_type,
             float_dc_type,
             rate_index,
-            rate_spec,
+            float_convention,
             notional,
             principal,
             payment_lag,
