@@ -105,11 +105,14 @@ class InterestRateIndex:
     ) -> float:
         fixing_dt = self.calendar.add_business_days(reset_dt, -self.fixing_lag)
 
-        if fixing_dt <= value_dt:
+        if fixing_dt < value_dt:
             if fixing_source is None:
                 raise FinError("Require fixing data source")
             fixing = fixing_source.get_fixing(fixing_dt, value_dt)
             return fixing * multiplier
+
+        if projection_curve is None:
+            raise FinError("Projection curve is required for future period rates")
 
         return projection_curve.fwd_rate(start_dt, end_dt, self.dc_type) * multiplier
 
