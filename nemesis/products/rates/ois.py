@@ -1,23 +1,25 @@
-import numpy as np
+###############################################################################
+from enum import Enum
 from typing import Union
 
-from ...utils.error import FinError
+import numpy as np
+
+from ...market.curves.discount_curve import DiscountCurve
+from ...utils.calendar import (
+    BusDayAdjustTypes,
+    Calendar,
+    CalendarTypes,
+    DateGenRuleTypes,
+)
 from ...utils.date import Date
 from ...utils.day_count import DayCountTypes
+from ...utils.error import FinError
 from ...utils.frequency import FrequencyTypes
-from ...utils.calendar import CalendarTypes, DateGenRuleTypes
-from ...utils.calendar import Calendar, BusDayAdjustTypes
+from ...utils.global_types import SwapTypes
 from ...utils.helpers import check_argument_types, label_to_string
 from ...utils.math import ONE_MILLION
-from ...utils.global_types import SwapTypes
-from ...market.curves.discount_curve import DiscountCurve
-
 from .swap_fixed_leg import SwapFixedLeg
 from .swap_float_leg import SwapFloatLeg
-
-###############################################################################
-
-from enum import Enum
 
 
 class FinCompoundingTypes(Enum):
@@ -105,6 +107,7 @@ class OIS:
             raise FinError("Effective date after maturity date")
 
         self.effective_dt = effective_dt
+        self.notional = notional
 
         float_leg_type = SwapTypes.PAY
         if fixed_leg_type == SwapTypes.PAY:
@@ -152,15 +155,25 @@ class OIS:
     ###########################################################################
 
     def value(
-        self, value_dt: Date, ois_curve: DiscountCurve, first_fixing_rate=None
+        self,
+        value_dt: Date,
+        ois_curve: DiscountCurve,
+        projection_curve: DiscountCurve = None,
+        first_fixing_rate=None,
     ):
         """Value the interest rate swap on a value date given a single Ibor
         discount curve."""
 
+        if projection_curve is None:
+            projection_curve = ois_curve
+
         fixed_leg_value = self.fixed_leg.value(value_dt, ois_curve)
 
         float_leg_value = self.float_leg.value(
-            value_dt, ois_curve, ois_curve, first_fixing_rate
+            value_dt,
+            ois_curve,
+            first_fixing_rate=first_fixing_rate,
+            projection_curve=projection_curve,
         )
 
         value = fixed_leg_value + float_leg_value
@@ -180,7 +193,7 @@ class OIS:
 
     ###########################################################################
 
-    def swap_rate(self, value_dt, ois_curve):
+    def swap_rate(self, value_dt, ois_curve, projection_curve: DiscountCurve = None):
         """Calculate the fixed leg cpn that makes the swap worth zero.
         If the valuation date is before the swap payments start then this
         is the forward swap rate as it starts in the future. The swap rate
@@ -188,10 +201,15 @@ class OIS:
         factor. If the swap fixed leg has begun then we have a spot
         starting swap."""
 
+        if projection_curve is None:
+            projection_curve = ois_curve
+
         pv01 = self.pv01(value_dt, ois_curve)
 
         float_leg_value = self.float_leg.value(
-            value_dt, ois_curve, ois_curve
+            value_dt,
+            ois_curve,
+            projection_curve=projection_curve,
         )
 
         cpn = float_leg_value / pv01 / self.fixed_leg.notional
